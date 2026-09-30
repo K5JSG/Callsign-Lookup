@@ -46,12 +46,14 @@ namespace CallsignLookup
             txtItuZone = new TextBox();
             lblArrlSection = new Label();
             txtArrlSection = new TextBox();
+            pictureBoxLogo = new PictureBox();
             bottomPanel = new FlowLayoutPanel();
             btnCopy = new Button();
             statusStrip = new StatusStrip();
             lblStatus = new ToolStripStatusLabel();
             topPanel.SuspendLayout();
             resultsPanel.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBoxLogo).BeginInit();
             bottomPanel.SuspendLayout();
             statusStrip.SuspendLayout();
             SuspendLayout();
@@ -74,7 +76,7 @@ namespace CallsignLookup
             topPanel.Padding = new Padding(8);
             topPanel.RowCount = 1;
             topPanel.RowStyles.Add(new RowStyle());
-            topPanel.Size = new Size(560, 51);
+            topPanel.Size = new Size(740, 51);
             topPanel.TabIndex = 0;
             //
             // lblCallsign
@@ -124,9 +126,10 @@ namespace CallsignLookup
             //
             // resultsPanel
             //
-            resultsPanel.ColumnCount = 2;
+            resultsPanel.ColumnCount = 3;
             resultsPanel.ColumnStyles.Add(new ColumnStyle());
             resultsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            resultsPanel.ColumnStyles.Add(new ColumnStyle());
             resultsPanel.Controls.Add(lblGridSquare, 0, 0);
             resultsPanel.Controls.Add(txtGridSquare, 1, 0);
             resultsPanel.Controls.Add(lblCqZone, 0, 1);
@@ -139,6 +142,8 @@ namespace CallsignLookup
             resultsPanel.Controls.Add(txtState, 1, 4);
             resultsPanel.Controls.Add(lblArrlSection, 0, 5);
             resultsPanel.Controls.Add(txtArrlSection, 1, 5);
+            resultsPanel.Controls.Add(pictureBoxLogo, 2, 0);
+            resultsPanel.SetRowSpan(pictureBoxLogo, 6);
             resultsPanel.Dock = DockStyle.Fill;
             resultsPanel.Location = new Point(0, 51);
             resultsPanel.Name = "resultsPanel";
@@ -151,7 +156,7 @@ namespace CallsignLookup
             resultsPanel.RowStyles.Add(new RowStyle());
             resultsPanel.RowStyles.Add(new RowStyle());
             resultsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            resultsPanel.Size = new Size(560, 240);
+            resultsPanel.Size = new Size(740, 240);
             resultsPanel.TabIndex = 1;
             //
             // lblGridSquare
@@ -250,6 +255,18 @@ namespace CallsignLookup
             txtArrlSection.ReadOnly = true;
             txtArrlSection.TabIndex = 11;
             //
+            // pictureBoxLogo
+            //
+            // Image is set in MainForm's constructor from AppLogo (built into the exe).
+            pictureBoxLogo.Anchor = AnchorStyles.Top;
+            pictureBoxLogo.BackColor = Color.Transparent;
+            pictureBoxLogo.Margin = new Padding(16, 3, 3, 3);
+            pictureBoxLogo.Name = "pictureBoxLogo";
+            pictureBoxLogo.Size = new Size(180, 180);
+            pictureBoxLogo.SizeMode = PictureBoxSizeMode.Zoom;
+            pictureBoxLogo.TabIndex = 12;
+            pictureBoxLogo.TabStop = false;
+            //
             // bottomPanel
             //
             bottomPanel.AutoSize = true;
@@ -259,7 +276,7 @@ namespace CallsignLookup
             bottomPanel.Location = new Point(0, 291);
             bottomPanel.Name = "bottomPanel";
             bottomPanel.Padding = new Padding(8, 4, 8, 4);
-            bottomPanel.Size = new Size(560, 41);
+            bottomPanel.Size = new Size(740, 41);
             bottomPanel.TabIndex = 2;
             //
             // btnCopy
@@ -279,7 +296,7 @@ namespace CallsignLookup
             statusStrip.Items.AddRange(new ToolStripItem[] { lblStatus });
             statusStrip.Location = new Point(0, 332);
             statusStrip.Name = "statusStrip";
-            statusStrip.Size = new Size(560, 22);
+            statusStrip.Size = new Size(740, 22);
             statusStrip.TabIndex = 3;
             //
             // lblStatus
@@ -294,17 +311,18 @@ namespace CallsignLookup
             AcceptButton = btnLookup;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(560, 322);
+            ClientSize = new Size(740, 322);
             Controls.Add(resultsPanel);
             Controls.Add(bottomPanel);
             Controls.Add(topPanel);
             Controls.Add(statusStrip);
-            MinimumSize = new Size(480, 361);
+            MinimumSize = new Size(620, 361);
             Name = "MainForm";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "Callsign Lookup";
             topPanel.ResumeLayout(false);
             topPanel.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBoxLogo).EndInit();
             resultsPanel.ResumeLayout(false);
             resultsPanel.PerformLayout();
             bottomPanel.ResumeLayout(false);
@@ -335,6 +353,7 @@ namespace CallsignLookup
         private TextBox txtItuZone;
         private Label lblArrlSection;
         private TextBox txtArrlSection;
+        private PictureBox pictureBoxLogo;
         private FlowLayoutPanel bottomPanel;
         private Button btnCopy;
         private StatusStrip statusStrip;

@@ -47,6 +47,7 @@ PrivilegesRequired=admin
 
 OutputDir=..\..\dist
 OutputBaseFilename={#MyAppName} Setup {#MyAppVersion}
+SetupIconFile=..\..\logo.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
 

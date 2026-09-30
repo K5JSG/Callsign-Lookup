@@ -11,6 +11,8 @@ namespace CallsignLookup
         public MainForm()
         {
             InitializeComponent();
+            Icon = AppLogo.Icon ?? Icon;
+            pictureBoxLogo.Image = AppLogo.Image;
             _settings = AppSettings.Load();
             UpdateStatus(_settings.HasQrzLogin
                 ? $"QRZ login: {_settings.QrzUsername}"

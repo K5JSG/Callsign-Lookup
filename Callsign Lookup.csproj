@@ -14,8 +14,18 @@
     <Copyright>Copyright © 2026. Jeremy S. Gaynor, K5JSG. All Rights Reserved.</Copyright>
     <Description>Looks up a callsign on QRZ.com and works out the station's 6-character grid square, county, CQ zone, ITU zone and ARRL section from its location.</Description>
     <PlatformTarget>AnyCPU</PlatformTarget>
-    <Version>1.0.0</Version>
+    <ApplicationIcon>logo.ico</ApplicationIcon>
+    <Version>1.1.0</Version>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="logo.ico" />
+    <!-- Window icons and the logo shown in the main window - see AppLogo.cs.
+         Logo.png (the full-size source artwork) is kept in the project folder
+         to regenerate these from, not shipped. -->
+    <EmbeddedResource Include="logo.ico" LogicalName="AppLogo/logo.ico" />
+    <EmbeddedResource Include="logo-256.png" LogicalName="AppLogo/logo-256.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Tests/ holds the separate test project (see the .slnx) - without this,

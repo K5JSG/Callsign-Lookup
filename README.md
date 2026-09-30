@@ -1,3 +1,5 @@
+<img src="logo-256.png" alt="Callsign Lookup logo" width="128" align="right" />
+
 # Callsign Lookup
 
 A Windows desktop tool that looks up an amateur radio callsign on [QRZ.com](https://www.qrz.com/) and works out, from the station's location:
@@ -53,6 +55,7 @@ This publishes a self-contained, single-file executable plus its `Data` folder t
 | Path | What it is |
 |------|------------|
 | `MainForm.cs`, `QrzLoginForm.cs` | The WinForms UI |
+| `AppLogo.cs`, `logo.ico`, `logo-256.png` | Program icon and window logo, built into the exe (`Logo.png` is the full-size source artwork) |
 | `Services/QrzService.cs` | QRZ XML client: login, session key reuse, re-login on timeout |
 | `Services/CallsignLookupService.cs` | Callsign → location → grid/county/zones/section |
 | `Services/Maidenhead.cs` | Grid square ↔ lat/long |

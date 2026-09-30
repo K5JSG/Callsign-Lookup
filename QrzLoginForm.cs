@@ -5,6 +5,7 @@ namespace CallsignLookup
         public QrzLoginForm(string username, string password)
         {
             InitializeComponent();
+            Icon = AppLogo.Icon ?? Icon;
             txtUsername.Text = username;
             txtPassword.Text = password;
         }
