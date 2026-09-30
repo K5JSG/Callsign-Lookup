@@ -25,20 +25,28 @@ Your QRZ password is stored encrypted with Windows DPAPI (readable only by your 
 
 Map data: Ontario census divisions © Statistics Canada ([Open Government Licence – Canada](https://open.canada.ca/en/open-government-licence-canada)); Algonquin Park outline © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL).
 
+## Installation
+
+Download the latest installer from the [Releases](https://github.com/K5JSG/Callsign-Lookup/releases) page and run it. The app is self-contained: no separate .NET runtime install is required. Installing a new version first removes the old one, so there's only ever one entry in Installed apps; your saved QRZ login is kept.
+
+You'll need a [QRZ.com](https://www.qrz.com/) account. The first time the app runs it asks for your QRZ username and password.
+
 ## Building from source
 
-Requirements: [.NET 10 SDK](https://dotnet.microsoft.com/download) (Windows).
+Requirements: [.NET 10 SDK](https://dotnet.microsoft.com/download) (Windows) and, optionally, [Inno Setup](https://jrsoftware.org/isdl.php) to build the installer.
 
 ```powershell
 dotnet build "Callsign Lookup.slnx"
 dotnet test "Callsign Lookup.slnx"
 ```
 
-To produce a self-contained, single-file release build in `publish\`:
+To run the tests and produce a self-contained release build and installer:
 
 ```powershell
 .\build.ps1 -Version <version>
 ```
+
+This publishes a self-contained, single-file executable plus its `Data` folder to `publish\` and, if Inno Setup is installed, builds the installer into `dist\`.
 
 ## Project layout
 
@@ -55,4 +63,9 @@ To produce a self-contained, single-file release build in `publish\`:
 | `Services/PolygonMath.cs` | Point-in-polygon and distance math shared by the lookups |
 | `Data/` | Boundary and section data shipped next to the exe |
 | `Tests/CallsignLookup.Tests` | xUnit tests (reference locations, QRZ response parsing) |
+| `Installer/InnoSetup/` | Inno Setup installer script (built by `build.ps1`) |
 | `Tools/build_ontario_divisions.py` | Regenerates `Data/ontarioDivisions.json` (instructions inside) |
+
+## License
+
+GNU General Public License v3.0; see [License.txt](License.txt).

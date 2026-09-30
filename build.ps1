@@ -3,11 +3,15 @@
     Builds Callsign Lookup.
 
 .DESCRIPTION
-    Runs the tests, then publishes a self-contained, single-file exe (no .NET
-    runtime needed on the target PC) with its Data\ folder into publish\.
+    Runs the tests, publishes a self-contained, single-file exe (no .NET
+    runtime needed on the target PC) with its Data\ folder into publish\,
+    and, if Inno Setup is installed, compiles the installer into dist\.
 
 .PARAMETER Version
-    Version stamped into the exe.
+    Version stamped into the exe and the installer filename.
+
+.PARAMETER SkipInstaller
+    Publish the exe only; do not build the installer.
 
 .EXAMPLE
     .\build.ps1
@@ -16,7 +20,8 @@
 
 [CmdletBinding()]
 param(
-    [string]$Version = "1.0.0"
+    [string]$Version = "1.0.0",
+    [switch]$SkipInstaller
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,6 +29,7 @@ $root = $PSScriptRoot
 $solution = Join-Path $root "Callsign Lookup.slnx"
 $project = Join-Path $root "Callsign Lookup.csproj"
 $publishDir = Join-Path $root "publish"
+$distDir = Join-Path $root "dist"
 
 Write-Host ""
 Write-Host "Callsign Lookup - build v$Version" -ForegroundColor Cyan
@@ -62,7 +68,45 @@ if (-not (Test-Path $exe)) { throw "Published exe not found at $exe" }
 $sizeMb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
 Write-Host ""
 Write-Host "  $exe  ($sizeMb MB)" -ForegroundColor Green
-Write-Host "  Ship it together with the publish\Data folder." -ForegroundColor Green
+
+# --- 3. Installer ------------------------------------------------------------
+
+if ($SkipInstaller) {
+    Write-Host ""
+    Write-Host "Skipping installer (-SkipInstaller)." -ForegroundColor DarkGray
+    exit 0
+}
+
+$iscc = @(
+    "$env:ProgramFiles\Inno Setup 7\ISCC.exe",
+    "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
+    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+    "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if (-not $iscc) {
+    Write-Host ""
+    Write-Host "Inno Setup was not found, so no installer was built." -ForegroundColor Yellow
+    Write-Host "Install it from https://jrsoftware.org/isdl.php and run this again," -ForegroundColor Yellow
+    Write-Host "or distribute publish\Callsign Lookup.exe together with publish\Data." -ForegroundColor Yellow
+    exit 0
+}
+
+New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+
+Write-Host ""
+Write-Host "Building installer..." -ForegroundColor Yellow
+
+& $iscc "/DMyAppVersion=$Version" (Join-Path $root "Installer\InnoSetup\Callsign Lookup.iss")
+if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
+
+$setup = Join-Path $distDir "Callsign Lookup Setup $Version.exe"
+if (Test-Path $setup) {
+    $setupMb = [math]::Round((Get-Item $setup).Length / 1MB, 1)
+    Write-Host ""
+    Write-Host "  $setup  ($setupMb MB)" -ForegroundColor Green
+}
+
 Write-Host ""
 Write-Host "Done." -ForegroundColor Cyan
 Write-Host ""
