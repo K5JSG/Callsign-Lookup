@@ -1,0 +1,79 @@
+{
+  "_source": "https://www.arrl.org/section-boundaries and https://contests.arrl.org/contestmultipliers.php?a=wve (retrieved 2026-09-30). County names are spelled to match counties.json.",
+  "states": {
+    "AK": "AK", "AL": "AL", "AR": "AR", "AZ": "AZ", "CO": "CO", "CT": "CT",
+    "DC": "MDC", "DE": "DE", "GA": "GA", "HI": "PAC", "IA": "IA", "ID": "ID",
+    "IL": "IL", "IN": "IN", "KS": "KS", "KY": "KY", "LA": "LA", "MD": "MDC",
+    "ME": "ME", "MI": "MI", "MN": "MN", "MO": "MO", "MS": "MS", "MT": "MT",
+    "NC": "NC", "ND": "ND", "NE": "NE", "NH": "NH", "NM": "NM", "NV": "NV",
+    "OH": "OH", "OK": "OK", "OR": "OR", "RI": "RI", "SC": "SC", "SD": "SD",
+    "TN": "TN", "UT": "UT", "VA": "VA", "VT": "VT", "WI": "WI", "WV": "WV",
+    "WY": "WY", "PR": "PR", "VI": "VI", "GU": "PAC", "AS": "PAC", "MP": "PAC"
+  },
+  "splitStates": {
+    "CA": {
+      "EB": ["Alameda", "Contra Costa", "Napa", "Solano"],
+      "LAX": ["Los Angeles"],
+      "ORG": ["Inyo", "Orange", "Riverside", "San Bernardino"],
+      "SB": ["San Luis Obispo", "Santa Barbara", "Ventura"],
+      "SCV": ["Monterey", "San Benito", "San Mateo", "Santa Clara", "Santa Cruz"],
+      "SDG": ["Imperial", "San Diego"],
+      "SF": ["Del Norte", "Humboldt", "Lake", "Marin", "Mendocino", "San Francisco", "Sonoma"],
+      "SJV": ["Calaveras", "Fresno", "Kern", "Kings", "Madera", "Mariposa", "Merced", "Mono", "San Joaquin", "Stanislaus", "Tulare", "Tuolumne"],
+      "SV": ["Alpine", "Amador", "Butte", "Colusa", "El Dorado", "Glenn", "Lassen", "Modoc", "Nevada", "Placer", "Plumas", "Sacramento", "Shasta", "Sierra", "Siskiyou", "Sutter", "Tehama", "Trinity", "Yolo", "Yuba"]
+    },
+    "FL": {
+      "NFL": ["Alachua", "Baker", "Bay", "Bradford", "Calhoun", "Citrus", "Clay", "Columbia", "Dixie", "Duval", "Escambia", "Flagler", "Franklin", "Gadsden", "Gilchrist", "Gulf", "Hamilton", "Hernando", "Holmes", "Jackson", "Jefferson", "Lafayette", "Lake", "Leon", "Levy", "Liberty", "Madison", "Marion", "Nassau", "Okaloosa", "Orange", "Putnam", "Santa Rosa", "Seminole", "St. Johns", "Sumter", "Suwannee", "Taylor", "Union", "Volusia", "Wakulla", "Walton", "Washington"],
+      "SFL": ["Brevard", "Broward", "Collier", "Miami-Dade", "Glades", "Hendry", "Indian River", "Lee", "Martin", "Monroe", "Okeechobee", "Osceola", "Palm Beach", "St. Lucie"],
+      "WCF": ["Charlotte", "DeSoto", "Hardee", "Highlands", "Hillsborough", "Manatee", "Pasco", "Pinellas", "Polk", "Sarasota"]
+    },
+    "MA": {
+      "EMA": ["Barnstable", "Bristol", "Dukes", "Essex", "Middlesex", "Nantucket", "Norfolk", "Plymouth", "Suffolk"],
+      "WMA": ["Berkshire", "Franklin", "Hampden", "Hampshire", "Worcester"]
+    },
+    "NJ": {
+      "NNJ": ["Bergen", "Essex", "Hudson", "Hunterdon", "Middlesex", "Monmouth", "Morris", "Passaic", "Somerset", "Sussex", "Union", "Warren"],
+      "SNJ": ["Atlantic", "Burlington", "Camden", "Cape May", "Cumberland", "Gloucester", "Mercer", "Ocean", "Salem"]
+    },
+    "NY": {
+      "ENY": ["Albany", "Columbia", "Dutchess", "Greene", "Orange", "Putnam", "Rensselaer", "Rockland", "Saratoga", "Schenectady", "Sullivan", "Ulster", "Warren", "Washington", "Westchester"],
+      "NLI": ["Bronx", "Kings", "Nassau", "New York", "Queens", "Richmond", "Suffolk"],
+      "NNY": ["Clinton", "Essex", "Franklin", "Fulton", "Hamilton", "Jefferson", "Lewis", "Montgomery", "St. Lawrence", "Schoharie"],
+      "WNY": ["Allegany", "Broome", "Cattaraugus", "Cayuga", "Chautauqua", "Chemung", "Chenango", "Cortland", "Delaware", "Erie", "Genesee", "Herkimer", "Livingston", "Madison", "Monroe", "Niagara", "Oneida", "Onondaga", "Ontario", "Orleans", "Oswego", "Otsego", "Schuyler", "Seneca", "Steuben", "Tioga", "Tompkins", "Wayne", "Wyoming", "Yates"]
+    },
+    "PA": {
+      "EPA": ["Adams", "Berks", "Bradford", "Bucks", "Carbon", "Chester", "Columbia", "Cumberland", "Dauphin", "Delaware", "Juniata", "Lackawanna", "Lancaster", "Lebanon", "Lehigh", "Luzerne", "Lycoming", "Monroe", "Montgomery", "Montour", "Northampton", "Northumberland", "Perry", "Philadelphia", "Pike", "Schuylkill", "Snyder", "Sullivan", "Susquehanna", "Tioga", "Union", "Wayne", "Wyoming", "York"],
+      "WPA": ["Allegheny", "Armstrong", "Beaver", "Bedford", "Blair", "Butler", "Cambria", "Cameron", "Centre", "Clarion", "Clearfield", "Clinton", "Crawford", "Elk", "Erie", "Fayette", "Forest", "Franklin", "Fulton", "Greene", "Huntingdon", "Indiana", "Jefferson", "Lawrence", "McKean", "Mercer", "Mifflin", "Potter", "Somerset", "Venango", "Warren", "Washington", "Westmoreland"]
+    },
+    "TX": {
+      "NTX": ["Anderson", "Archer", "Baylor", "Bell", "Bosque", "Bowie", "Brown", "Camp", "Cass", "Cherokee", "Clay", "Collin", "Comanche", "Cooke", "Coryell", "Dallas", "Delta", "Denton", "Eastland", "Ellis", "Erath", "Falls", "Fannin", "Franklin", "Freestone", "Grayson", "Gregg", "Hamilton", "Harrison", "Henderson", "Hill", "Hood", "Hopkins", "Hunt", "Jack", "Johnson", "Kaufman", "Lamar", "Lampasas", "Limestone", "McLennan", "Marion", "Mills", "Montague", "Morris", "Nacogdoches", "Navarro", "Palo Pinto", "Panola", "Parker", "Rains", "Red River", "Rockwall", "Rusk", "Shelby", "Smith", "Somervell", "Stephens", "Tarrant", "Throckmorton", "Titus", "Upshur", "Van Zandt", "Wichita", "Wilbarger", "Wise", "Wood", "Young"],
+      "STX": ["Angelina", "Aransas", "Atascosa", "Austin", "Bandera", "Bastrop", "Bee", "Bexar", "Blanco", "Brazoria", "Brazos", "Brooks", "Burleson", "Burnet", "Caldwell", "Calhoun", "Cameron", "Chambers", "Colorado", "Comal", "Concho", "DeWitt", "Dimmit", "Duval", "Edwards", "Fayette", "Fort Bend", "Frio", "Galveston", "Gillespie", "Goliad", "Gonzales", "Grimes", "Guadalupe", "Hardin", "Harris", "Hays", "Hidalgo", "Houston", "Jackson", "Jasper", "Jefferson", "Jim Hogg", "Jim Wells", "Karnes", "Kendall", "Kenedy", "Kerr", "Kimble", "Kinney", "Kleberg", "La Salle", "Lavaca", "Lee", "Leon", "Liberty", "Live Oak", "Llano", "Madison", "Mason", "Matagorda", "Maverick", "McCulloch", "McMullen", "Medina", "Menard", "Milam", "Montgomery", "Newton", "Nueces", "Orange", "Polk", "Real", "Refugio", "Robertson", "Sabine", "San Augustine", "San Jacinto", "San Patricio", "San Saba", "Starr", "Travis", "Trinity", "Tyler", "Uvalde", "Val Verde", "Victoria", "Walker", "Waller", "Washington", "Webb", "Wharton", "Willacy", "Williamson", "Wilson", "Zapata", "Zavala"],
+      "WTX": ["Andrews", "Armstrong", "Bailey", "Borden", "Brewster", "Briscoe", "Callahan", "Carson", "Castro", "Childress", "Cochran", "Coke", "Coleman", "Collingsworth", "Cottle", "Crane", "Crockett", "Crosby", "Culberson", "Dallam", "Dawson", "Deaf Smith", "Dickens", "Donley", "Ector", "El Paso", "Fisher", "Floyd", "Foard", "Gaines", "Garza", "Glasscock", "Gray", "Hale", "Hall", "Hansford", "Hardeman", "Hartley", "Haskell", "Hemphill", "Hockley", "Howard", "Hudspeth", "Hutchinson", "Irion", "Jeff Davis", "Jones", "Kent", "King", "Knox", "Lamb", "Lipscomb", "Loving", "Lubbock", "Lynn", "Martin", "Midland", "Mitchell", "Moore", "Motley", "Nolan", "Ochiltree", "Oldham", "Parmer", "Pecos", "Potter", "Presidio", "Randall", "Reagan", "Reeves", "Roberts", "Runnels", "Schleicher", "Scurry", "Shackelford", "Sherman", "Sterling", "Stonewall", "Sutton", "Swisher", "Taylor", "Terrell", "Terry", "Tom Green", "Upton", "Ward", "Wheeler", "Winkler", "Yoakum"]
+    },
+    "WA": {
+      "EWA": ["Adams", "Asotin", "Benton", "Chelan", "Columbia", "Douglas", "Ferry", "Franklin", "Garfield", "Grant", "Kittitas", "Klickitat", "Lincoln", "Okanogan", "Pend Oreille", "Spokane", "Stevens", "Walla Walla", "Whitman", "Yakima"],
+      "WWA": ["Clallam", "Clark", "Cowlitz", "Grays Harbor", "Island", "Jefferson", "King", "Kitsap", "Lewis", "Mason", "Pacific", "Pierce", "San Juan", "Skagit", "Skamania", "Snohomish", "Thurston", "Wahkiakum", "Whatcom"]
+    }
+  },
+  "canada": {
+    "AB": "AB", "BC": "BC", "MB": "MB", "NB": "NB", "NL": "NL", "NS": "NS",
+    "PE": "PE", "QC": "QC", "SK": "SK", "NT": "TER", "NU": "TER", "YT": "TER"
+  },
+  "_ontarioSource": "RAC Ontario sections effective 2023-01-01 (https://www.va3cco.com/ontariosections2023.pdf), keyed by Statistics Canada census division name as in ontarioDivisions.json. Sudbury District isn't in RAC's table (only the City of Sudbury is) - it's northern Ontario, so ONN. Nipissing inside or south of Algonquin Park is ONE; the code handles that split.",
+  "ontario": {
+    "Durham": "GH", "Halton": "GH", "Hamilton": "GH", "Niagara": "GH", "Peel": "GH", "Toronto": "GH", "York": "GH",
+
+    "Frontenac": "ONE", "Hastings": "ONE", "Haliburton": "ONE", "Kawartha Lakes": "ONE", "Lanark": "ONE",
+    "Leeds and Grenville": "ONE", "Lennox and Addington": "ONE", "Northumberland": "ONE", "Ottawa": "ONE",
+    "Prince Edward": "ONE", "Peterborough": "ONE", "Prescott and Russell": "ONE", "Renfrew": "ONE",
+    "Stormont, Dundas and Glengarry": "ONE",
+
+    "Algoma": "ONN", "Cochrane": "ONN", "Kenora": "ONN", "Manitoulin": "ONN", "Nipissing": "ONN",
+    "Rainy River": "ONN", "Greater Sudbury": "ONN", "Sudbury": "ONN", "Thunder Bay": "ONN", "Timiskaming": "ONN",
+
+    "Brant": "ONS", "Bruce": "ONS", "Chatham-Kent": "ONS", "Dufferin": "ONS", "Elgin": "ONS", "Essex": "ONS",
+    "Grey": "ONS", "Haldimand-Norfolk": "ONS", "Huron": "ONS", "Lambton": "ONS", "Middlesex": "ONS",
+    "Muskoka": "ONS", "Oxford": "ONS", "Perth": "ONS", "Parry Sound": "ONS", "Simcoe": "ONS",
+    "Waterloo": "ONS", "Wellington": "ONS"
+  }
+}

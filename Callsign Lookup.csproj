@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <RootNamespace>CallsignLookup</RootNamespace>
+    <AssemblyName>Callsign Lookup</AssemblyName>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Authors>Jeremy S. Gaynor, K5JSG</Authors>
+    <Company>K5JSG</Company>
+    <Copyright>Copyright © 2026. Jeremy S. Gaynor, K5JSG. All Rights Reserved.</Copyright>
+    <Description>Looks up a callsign on QRZ.com and works out the station's 6-character grid square, county, CQ zone, ITU zone and ARRL section from its location.</Description>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Tests/ holds the separate test project (see the .slnx) - without this,
+         this project's default recursive file glob would also try to compile
+         its source files into itself. -->
+    <Compile Remove="Tests\**" />
+    <EmbeddedResource Remove="Tests\**" />
+    <None Remove="Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CallsignLookup.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Read-only lookup data, shipped in a Data\ folder next to the exe:
+         counties.json, cqZones.json and ituZones.json (shared with POTA
+         Activator Park Activations) and arrlSections.json. -->
+    <None Update="Data\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

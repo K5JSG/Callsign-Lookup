@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Callsign Lookup.csproj" />
+  <Project Path="Tests/CallsignLookup.Tests/CallsignLookup.Tests.csproj" />
+</Solution>
