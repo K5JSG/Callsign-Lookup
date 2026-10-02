@@ -12,10 +12,10 @@
     <Authors>Jeremy S. Gaynor, K5JSG</Authors>
     <Company>K5JSG</Company>
     <Copyright>Copyright © 2026. Jeremy S. Gaynor, K5JSG. All Rights Reserved.</Copyright>
-    <Description>Looks up a callsign on QRZ.com and works out the station's 6-character grid square, county, CQ zone, ITU zone and ARRL section from its location.</Description>
+    <Description>Looks up a callsign on QRZ.com and works out the station's 6-character grid square, county, CQ zone, ITU zone, ARRL section and IOTA island from its location.</Description>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <ApplicationIcon>logo.ico</ApplicationIcon>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -43,7 +43,8 @@
   <ItemGroup>
     <!-- Read-only lookup data, shipped in a Data\ folder next to the exe:
          counties.json, cqZones.json and ituZones.json (shared with POTA
-         Activator Park Activations) and arrlSections.json. -->
+         Activator Park Activations), arrlSections.json, ontarioDivisions.json,
+         iota.json (the IOTA directory) and iotaIslands.json. -->
     <None Update="Data\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

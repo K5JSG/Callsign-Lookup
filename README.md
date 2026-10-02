@@ -8,6 +8,7 @@ A Windows desktop tool that looks up an amateur radio callsign on [QRZ.com](http
 - **CQ zone** and **ITU zone**
 - **County** and **state** (US; for Canadian stations the province)
 - **ARRL/RAC section**
+- **IOTA reference and island**, e.g. `AF-004 - Canary Islands` / `Alegranza`, or `EU-005 - Great Britain` / `Great Britain` for anywhere in England, Scotland or Wales
 
 Each result is in its own read-only box: copy one with Ctrl+C or right-click → Copy, or all of them with **Copy All**.
 
@@ -22,10 +23,11 @@ Built by Jeremy S. Gaynor, K5JSG.
    - **County**: US stations only, going by the DXCC entity number on the QRZ record: United States (291) plus the separate entities that still have Census counties: Alaska (6), Hawaii (110), Puerto Rico (202), US Virgin Islands (285), Guam (103), American Samoa (9), Swains Island (515) and Mariana Islands (166). Other US possessions (Guantanamo Bay, Navassa, Wake, etc.) get no county. Point-in-polygon against US Census county boundaries (`Data/counties.json`, shared with POTA Activator Park Activations). A US point outside every county outline (just offshore, a barrier island, an approximate grid-square center in a lake) gets the nearest county in the state on its QRZ record. Stations anywhere else, Canada included, never get a county.
    - **CQ/ITU zone**: point-in-polygon against zone boundaries (`Data/cqZones.json`, `Data/ituZones.json`), simplified from HB9HIL's MIT-licensed [hamradio-zones-geojson](https://github.com/HB9HIL/hamradio-zones-geojson), the dataset behind [zone-check.eu](https://zone-check.eu/).
    - **ARRL section**: `Data/arrlSections.json`, from the [ARRL section boundaries](https://www.arrl.org/section-boundaries). Most states are one section. CA, FL, MA, NJ, NY, PA, TX and WA are split by county, so the county decides it. Canadian sections go by the province on the QRZ record. Ontario's four sections (GH/ONE/ONN/ONS) follow census divisions per [RAC's 2023 table](https://www.va3cco.com/ontariosections2023.pdf), so the station's division is looked up in `Data/ontarioDivisions.json` (Statistics Canada 2021 census divisions). Nipissing District is split: inside or south of Algonquin Park is ONE, the rest is ONN. The park outline comes from OpenStreetMap.
+   - **IOTA**: the IOTA directory gives each group's DXCC entities, a rough bounding box and the names of the islands that count for it, but not where those islands are. So `Data/iotaIslands.json` holds the outline of every listed island, taken from OpenStreetMap and matched to the IOTA list by name. The station is on whichever listed island contains its location (or is within about 1 km of it), for a group whose box and DXCC entity fit, so the Island field is the island's name as IOTA lists it. A station that isn't on a listed island (the mainland, or an approximate location out at sea) gets the IOTA reference from its QRZ record if it has one, and the status bar says so. The IOTA list itself is downloaded from [iota-world.org](https://www.iota-world.org/) into `%LocalAppData%\Callsign Lookup\iota.json` and refreshed weekly, so new groups show up without an app update. Until the first download (or if it fails) the copy shipped in `Data/iota.json` is used.
 
 Your QRZ password is stored encrypted with Windows DPAPI (readable only by your Windows account on that PC) in `%LocalAppData%\Callsign Lookup\settings.json`.
 
-Map data: Ontario census divisions © Statistics Canada ([Open Government Licence – Canada](https://open.canada.ca/en/open-government-licence-canada)); Algonquin Park outline © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL).
+Map data: Ontario census divisions © Statistics Canada ([Open Government Licence – Canada](https://open.canada.ca/en/open-government-licence-canada)); Algonquin Park and island outlines © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). IOTA directory from [Islands On The Air](https://www.iota-world.org/).
 
 ## Installation
 
@@ -62,12 +64,14 @@ This publishes a self-contained, single-file executable plus its `Data` folder t
 | `Services/CountyLookupService.cs` | Offline county lookup |
 | `Services/ZoneLookupService.cs` | Offline CQ/ITU zone lookup |
 | `Services/ArrlSectionService.cs` | ARRL/RAC section lookup |
+| `Services/IotaService.cs` | Offline IOTA reference/island lookup, and the weekly IOTA list download |
 | `Services/OntarioDivisionService.cs` | Offline Ontario census division lookup (for Ontario sections) |
 | `Services/PolygonMath.cs` | Point-in-polygon and distance math shared by the lookups |
 | `Data/` | Boundary and section data shipped next to the exe |
 | `Tests/CallsignLookup.Tests` | xUnit tests (reference locations, QRZ response parsing) |
 | `Installer/InnoSetup/` | Inno Setup installer script (built by `build.ps1`) |
 | `Tools/build_ontario_divisions.py` | Regenerates `Data/ontarioDivisions.json` (instructions inside) |
+| `Tools/build_iota_islands.py` | Regenerates `Data/iotaIslands.json` from OpenStreetMap (instructions inside) |
 
 ## License
 

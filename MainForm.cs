@@ -24,6 +24,10 @@ namespace CallsignLookup
             base.OnShown(e);
             txtCallsign.Focus();
             if (!_settings.HasQrzLogin) PromptForQrzLogin();
+
+            // Weekly refresh of the IOTA list in the background - lookups use
+            // the saved (or shipped) copy until it's done, and if it fails.
+            _ = IotaListUpdater.RefreshIfStaleAsync();
         }
 
         private void BtnQrzLogin_Click(object? sender, EventArgs e) => PromptForQrzLogin();
@@ -63,6 +67,7 @@ namespace CallsignLookup
                 // Worth knowing when the lat/long isn't QRZ's own.
                 if (result.Qrz.Latitude == null || result.Qrz.Longitude == null)
                     status += $"  Location: {result.LocationSource}.";
+                if (result.Iota?.Note.Length > 0) status += $"  IOTA: {result.Iota.Note}.";
                 if (_qrz.LoginMessage.Length > 0) status += $"  QRZ: {_qrz.LoginMessage}";
                 UpdateStatus(status);
             }
@@ -96,6 +101,8 @@ namespace CallsignLookup
             txtState.Text = result.County?.StateAbbrev
                 ?? (result.Qrz.IsCanadian ? Dash(result.Qrz.State) : "-");
             txtArrlSection.Text = result.ArrlSection?.Section ?? "-";
+            txtIota.Text = result.Iota?.Reference ?? "-";
+            txtIsland.Text = Dash(result.Iota?.Island ?? "");
             btnCopy.Enabled = true;
         }
 
@@ -114,6 +121,8 @@ namespace CallsignLookup
             (lblCounty, txtCounty),
             (lblState, txtState),
             (lblArrlSection, txtArrlSection),
+            (lblIota, txtIota),
+            (lblIsland, txtIsland),
         ];
 
         private static string Dash(string value) => value.Length > 0 ? value : "-";

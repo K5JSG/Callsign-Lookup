@@ -300,3 +300,71 @@ namespace CallsignLookup.Tests
         }
     }
 }
+
+namespace CallsignLookup.Tests
+{
+    public class IotaTests
+    {
+        [Theory]
+        [InlineData(29.395, -13.50, 29, "AF-004 - Canary Islands", "Alegranza")]
+        [InlineData(28.12474, -15.48097, 29, "AF-004 - Canary Islands", "Gran Canaria")] // EA8RM, Las Palmas
+        [InlineData(28.31, -16.55, 29, "AF-004 - Canary Islands", "Tenerife")]
+        [InlineData(51.50, -0.12, 223, "EU-005 - Great Britain", "Great Britain")]    // London, England
+        [InlineData(51.48, -3.18, 294, "EU-005 - Great Britain", "Great Britain")]    // Cardiff, Wales
+        [InlineData(55.95, -3.19, 279, "EU-005 - Great Britain", "Great Britain")]    // Edinburgh, Scotland
+        [InlineData(53.26, -4.40, 294, "EU-005 - Great Britain", "Anglesey;Ynys Mon")]
+        [InlineData(50.70, -1.30, 223, "EU-120 - English Coastal Islands", "Isle of Wight")]
+        [InlineData(4.177687, 73.509083, 159, "AS-013 - Maldives", "Male")]            // 8Q7PR
+        [InlineData(21.9753, -159.72297, 110, "OC-019 - Hawaiian Islands", "Kauai")]   // WH6S, Kekaha
+        public void Find_OnAnIsland(double lat, double lon, int dxcc, string reference, string island)
+        {
+            var match = IotaService.Find(lat, lon, dxcc, "");
+            Assert.NotNull(match);
+            Assert.Equal(reference, match.Reference);
+            Assert.Equal(island, match.Island);
+            Assert.Equal("", match.Note);
+        }
+
+        [Theory]
+        [InlineData(40.42, -3.70, 281)]   // Madrid - mainland
+        [InlineData(51.50, -0.12, 245)]   // London's location with an Irish DXCC - EU-005 doesn't count for EI
+        [InlineData(32.7767, -96.7970, 291)] // Dallas
+        public void Find_NotOnAnIsland(double lat, double lon, int dxcc) =>
+            Assert.Null(IotaService.Find(lat, lon, dxcc, ""));
+
+        [Fact]
+        public void Find_NotOnAnIsland_FallsBackToQrzIota()
+        {
+            var match = IotaService.Find(28.0, -15.0, 29, "af-004"); // at sea between the islands
+            Assert.NotNull(match);
+            Assert.Equal("AF-004", match.RefNo);
+            Assert.Equal("", match.Island);
+            Assert.Contains("QRZ", match.Note);
+        }
+
+        [Fact]
+        public void Find_IgnoresQrzIotaThatIsntReal() =>
+            Assert.Null(IotaService.Find(40.42, -3.70, 281, "XX-999"));
+
+        [Fact]
+        public void ParseList_FixesLongitudesAndTheAntimeridian()
+        {
+            const string json = """
+                [{"refno":"AF-004","name":"Canary Islands","dxcc_num":"29","latitude_max":"27.50","latitude_min":"29.50",
+                  "longitude_max":"-13.25","longitude_min":"-18.25","sub_groups":[]},
+                 {"refno":"AS-027","name":"Vrangelya (Wrangel) Island","dxcc_num":"15","latitude_max":"71.75","latitude_min":"70.67",
+                  "longitude_max":"-175.25","longitude_min":"178.25","sub_groups":[]},
+                 {"refno":"EU-005","name":"Great Britain","dxcc_num":"223,294,279","latitude_max":"58.67","latitude_min":"49.83",
+                  "longitude_max":"1.83","longitude_min":"-6.25","sub_groups":[]}]
+                """;
+            var groups = IotaService.ParseList(json);
+
+            Assert.True(groups[0].Contains(28.5, -16.0, 0));
+            Assert.False(groups[0].Contains(28.5, -12.0, 0));
+            Assert.True(groups[1].Contains(71.2, 179.5, 0));
+            Assert.True(groups[1].Contains(71.2, -179.5, 0));
+            Assert.False(groups[1].Contains(71.2, 170.0, 0));
+            Assert.Equal([223, 294, 279], groups[2].Dxcc);
+        }
+    }
+}

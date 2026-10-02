@@ -23,6 +23,7 @@ namespace CallsignLookup.Services
         public double? Longitude { get; init; }
         public string CqZone { get; init; } = "";
         public string ItuZone { get; init; } = "";
+        public string Iota { get; init; } = "";         // IOTA reference, e.g. "EU-005" (user-entered)
         // How QRZ derived lat/lon: user, geocode, grid, zip, state, dxcc or none.
         public string GeoLoc { get; init; } = "";
 
@@ -161,6 +162,7 @@ namespace CallsignLookup.Services
                 Longitude = ParseDouble(Child(callsign, "lon")),
                 CqZone = Child(callsign, "cqzone"),
                 ItuZone = Child(callsign, "ituzone"),
+                Iota = Child(callsign, "iota"),
                 GeoLoc = Child(callsign, "geoloc"),
                 Land = Child(callsign, "land"),
                 Dxcc = int.TryParse(Child(callsign, "dxcc"), NumberStyles.None, CultureInfo.InvariantCulture, out int dxcc) ? dxcc : null,

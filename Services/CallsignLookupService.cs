@@ -14,10 +14,11 @@ namespace CallsignLookup.Services
         public int? CqZone { get; init; }
         public int? ItuZone { get; init; }
         public ArrlSectionMatch? ArrlSection { get; init; }
+        public IotaMatch? Iota { get; init; }
     }
 
     // The whole lookup: callsign -> QRZ record -> a location -> grid square,
-    // county, CQ/ITU zone and ARRL section, all computed locally from that
+    // county, CQ/ITU zone, ARRL section and IOTA island, all computed locally from that
     // location rather than trusted from QRZ's own (user-entered) fields.
     public sealed class CallsignLookupService(QrzService qrz)
     {
@@ -47,7 +48,12 @@ namespace CallsignLookup.Services
             }
             else
             {
-                return new LookupResult { Qrz = record, LocationSource = "None - QRZ record has no lat/long or grid square" };
+                return new LookupResult
+                {
+                    Qrz = record,
+                    LocationSource = "None - QRZ record has no lat/long or grid square",
+                    Iota = IotaService.FromQrz(record.Iota, ""),
+                };
             }
 
             // Counties only for US stations - and for those, always one (the
@@ -76,6 +82,7 @@ namespace CallsignLookup.Services
                 CqZone = ZoneLookupService.FindCqZone(lat.Value, lon.Value),
                 ItuZone = ZoneLookupService.FindItuZone(lat.Value, lon.Value),
                 ArrlSection = section,
+                Iota = IotaService.Find(lat.Value, lon.Value, record.Dxcc, record.Iota),
             };
         }
 
