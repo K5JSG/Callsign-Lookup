@@ -13,6 +13,8 @@ namespace CallsignLookup
             InitializeComponent();
             Icon = AppLogo.Icon ?? Icon;
             pictureBoxLogo.Image = AppLogo.Image;
+            // The warning bar wraps to the window's width.
+            Resize += (_, _) => lblIotaUpdate.MaximumSize = new Size(ClientSize.Width, 0);
             _settings = AppSettings.Load();
             UpdateStatus(_settings.HasQrzLogin
                 ? $"QRZ login: {_settings.QrzUsername}"
@@ -27,7 +29,40 @@ namespace CallsignLookup
 
             // Weekly refresh of the IOTA list in the background - lookups use
             // the saved (or shipped) copy until it's done, and if it fails.
-            _ = IotaListUpdater.RefreshIfStaleAsync();
+            ShowIotaUpdateWarning();
+            _ = RefreshIotaListAsync();
+        }
+
+        private async Task RefreshIotaListAsync()
+        {
+            if (await IotaListUpdater.RefreshIfStaleAsync()) ShowIotaUpdateWarning();
+        }
+
+        // IOTA adds islands now and then. The new list arrives by itself, but
+        // their outlines only come with a new version of the island data, so
+        // until then a station on one can't be placed on it - say so.
+        private void ShowIotaUpdateWarning()
+        {
+            var missing = IotaService.IslandsMissingOutlines();
+            if (missing.Count > 0)
+            {
+                string examples = string.Join(", ", missing.Take(3)) + (missing.Count > 3 ? ", ..." : "");
+                lblIotaUpdate.Text =
+                    $"IOTA has added {missing.Count} new island{(missing.Count == 1 ? "" : "s")} ({examples}) " +
+                    "since this version's island data was built - the island data needs updating " +
+                    "before stations on them can be found. Check for a newer Callsign Lookup.";
+            }
+
+            bool show = missing.Count > 0;
+            if (show == lblIotaUpdate.Visible) return;
+
+            // Grow (or shrink) the window by the bar's height rather than
+            // squeezing the results out of view.
+            lblIotaUpdate.MaximumSize = new Size(ClientSize.Width, 0);
+            int change = lblIotaUpdate.GetPreferredSize(new Size(ClientSize.Width, 0)).Height * (show ? 1 : -1);
+            lblIotaUpdate.Visible = show;
+            MinimumSize = new Size(MinimumSize.Width, MinimumSize.Height + change);
+            Height += change;
         }
 
         private void BtnQrzLogin_Click(object? sender, EventArgs e) => PromptForQrzLogin();

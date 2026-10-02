@@ -19,7 +19,8 @@ namespace CallsignLookup.Services
     //     groups show up without a new release), or failing that the one
     //     shipped in Data\iota.json.
     //   * Data\iotaIslands.json - the outline of each island on a group's
-    //     island list, from OpenStreetMap (built by Tools/build_iota_islands.py).
+    //     island list, plus the unlisted islands within ~10 km of those, from
+    //     OpenStreetMap (built by Tools/build_iota_islands.py).
     //
     // A station is on an island when its location is inside one of those
     // outlines, for a group whose DXCC entity and box fit. So London is on
@@ -49,6 +50,11 @@ namespace CallsignLookup.Services
             public double MaxLat { get; set; }
             public List<List<double[]>> Polys { get; set; } = new();
             public List<double[]> Points { get; set; } = new(); // islets OSM only has as a point
+
+            // False for an island IOTA doesn't name but that lies close to
+            // one it does (Aunu'u, off Tutuila) - it very likely counts for
+            // the group, but that's for the user to check.
+            public bool Listed { get; set; } = true;
 
             public bool BoxContains(double lat, double lon, double margin) =>
                 lat >= MinLat - margin && lat <= MaxLat + margin &&
@@ -86,6 +92,45 @@ namespace CallsignLookup.Services
 
         // Called after IotaListUpdater saves a newer list.
         public static void ReloadList() => _groups = null;
+
+        // Islands in the downloaded IOTA list that weren't in the one shipped
+        // in Data\ - which is the list Data\iotaIslands.json was built from,
+        // so these have no outline and can't be found until the island data
+        // is rebuilt and a new version released. Empty when there's no
+        // download yet, or nothing new. Each is "REF Island", e.g.
+        // "OC-045 Aunu'u".
+        public static List<string> IslandsMissingOutlines()
+        {
+            try
+            {
+                if (!File.Exists(DownloadedListPath)) return [];
+                return NewIslands(File.ReadAllText(DataFiles.PathFor(ListFileName)), File.ReadAllText(DownloadedListPath));
+            }
+            catch (Exception ex) when (IsBadList(ex) || ex is IOException or UnauthorizedAccessException)
+            {
+                return [];
+            }
+        }
+
+        internal static List<string> NewIslands(string shippedJson, string downloadedJson)
+        {
+            var shipped = IslandNames(shippedJson).ToHashSet();
+            return IslandNames(downloadedJson).Where(island => !shipped.Contains(island)).Distinct().ToList();
+        }
+
+        private static IEnumerable<string> IslandNames(string json)
+        {
+            using var doc = JsonDocument.Parse(json);
+            var names = new List<string>();
+            foreach (var g in doc.RootElement.EnumerateArray())
+            {
+                string refNo = g.GetProperty("refno").GetString()?.Trim() ?? "";
+                foreach (var sub in g.GetProperty("sub_groups").EnumerateArray())
+                    foreach (var island in sub.GetProperty("islands").EnumerateArray())
+                        names.Add($"{refNo} {island.GetProperty("island_name").GetString()?.Trim()}");
+            }
+            return names;
+        }
 
         private static IotaGroup[] LoadGroups()
         {
@@ -162,7 +207,7 @@ namespace CallsignLookup.Services
             var on = nearby
                 .Where(i => PolygonMath.Contains(i.Polys, lon, lat))
                 .MinBy(i => i.BoxArea);
-            if (on != null) return new IotaMatch(on.Ref, groups[on.Ref].Name, on.Island);
+            if (on != null) return Match(on, groups[on.Ref], "");
 
             var closest = nearby
                 .Select(i => (Island: i, Distance: Math.Sqrt(DistanceSquared(i, lon, lat))))
@@ -172,11 +217,20 @@ namespace CallsignLookup.Services
             if (closest.Island is IslandShape island)
             {
                 // Only an islet OSM maps as a point can't contain the location.
-                string note = island.Polys.Count > 0 ? $"Location is just off {island.Island}" : "";
-                return new IotaMatch(island.Ref, groups[island.Ref].Name, island.Island, note);
+                return Match(island, groups[island.Ref], island.Polys.Count > 0 ? $"Location is just off {island.Island}" : "");
             }
 
             return FromQrz(qrzIota, "Location isn't on a listed IOTA island");
+        }
+
+        private static IotaMatch Match(IslandShape island, IotaGroup group, string note)
+        {
+            if (!island.Listed)
+            {
+                string unlisted = $"{island.Island} isn't on IOTA's island list for {group.Ref} - check it counts";
+                note = note.Length > 0 ? $"{note}. {unlisted}" : unlisted;
+            }
+            return new IotaMatch(group.Ref, group.Name, island.Island, note);
         }
 
         private static double DistanceSquared(IslandShape island, double lon, double lat)

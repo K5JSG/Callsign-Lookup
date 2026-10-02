@@ -13,6 +13,12 @@ The IOTA directory has island names but no locations, so:
   3. The outlines of the matched islands are downloaded (from QLever's
      OSM endpoint, which serves finished outlines far faster than
      Overpass) and simplified.
+  4. Named islands that aren't on a group's list but lie within ~5 km of
+     one that is (Aunu'u, 1.5 km off Tutuila, for OC-045) are added too,
+     flagged "listed": false - IOTA often names only a group's main
+     islands. Each goes with the group of the nearest listed island. Left
+     out: ones inside a listed island (islands in Scottish lochs), which
+     can't count for IOTA, and rocks too small to live on.
 
 Overpass responses are cached in <cache dir>, so an interrupted run (the
 public Overpass servers are often busy) picks up where it left off.
@@ -38,7 +44,8 @@ import urllib.parse
 import urllib.request
 
 from shapely import wkt
-from shapely.geometry import LineString, MultiPolygon, Polygon
+from shapely import STRtree
+from shapely.geometry import LineString, MultiPolygon, Point, Polygon
 
 # The main public server. When busy it answers 504 quickly, so retrying it
 # beats waiting out a mirror that may not answer at all.
@@ -54,12 +61,20 @@ SIMPLIFY_DEGREES = 0.0005
 MAX_SIMPLIFY_DEGREES = 0.003
 
 
-def simplify(shape):
+def simplify(shape, min_tolerance=SIMPLIFY_DEGREES):
     min_x, min_y, max_x, max_y = shape.bounds
     size = ((max_x - min_x) * (max_y - min_y)) ** 0.5
-    tolerance = min(MAX_SIMPLIFY_DEGREES, max(SIMPLIFY_DEGREES, size * 0.0003))
+    tolerance = min(MAX_SIMPLIFY_DEGREES, max(min_tolerance, size * 0.0003))
     return shape.simplify(tolerance, preserve_topology=True)
 
+
+# How far (degrees, ~5 km) an unlisted island can be from a listed one in
+# the same group and still be included...
+NEAR_DEGREES = 0.05
+# ...and how big it must be (square degrees, ~0.05 km2 or 220 x 220 m) - the
+# tens of thousands of named rocks along Scandinavian and Scottish coasts
+# would otherwise be most of the file, with no stations on them.
+MIN_UNLISTED_AREA = 4e-6
 
 # IOTA's boxes are only to the nearest few minutes of arc.
 BOX_MARGIN = 0.1
@@ -233,7 +248,7 @@ def world_islands(groups, cache):
 def find_matches(groups, cache):
     """-> {(ref, island name): set of (osm type, id)} plus node points."""
     world = world_islands(groups, cache)
-    matches, points, areas = {}, {}, {}
+    matches, points, areas, in_boxes = {}, {}, {}, {}
     for n, g in enumerate(groups, 1):
         ref = g["refno"]
         listed = [i["island_name"].strip() for s in g["sub_groups"] for i in s["islands"]
@@ -247,6 +262,7 @@ def find_matches(groups, cache):
 
         in_box = [(el, area) for el, lon, lat, area in world if in_group_box(g, lon, lat)]
         elements = [el for el, _ in in_box]
+        in_boxes[ref] = elements
         for el, area in in_box:
             areas[(el["type"], el["id"])] = area
 
@@ -261,7 +277,63 @@ def find_matches(groups, cache):
                 found += 1
         if n % 100 == 0:
             print(f"[{n}/{len(groups)}] matched", flush=True)
-    return matches, points, areas
+    return matches, points, areas, in_boxes
+
+
+def bounds_of(el):
+    if "bounds" in el:
+        b = el["bounds"]
+        return b["minlon"], b["minlat"], b["maxlon"], b["maxlat"]
+    return el["lon"], el["lat"], el["lon"], el["lat"]
+
+
+def find_unlisted(matches, areas, in_boxes, cache):
+    """Named islands near a group's listed ones but not on its list ->
+    {(ref, OSM name): [shapes]}, each with the group of its nearest listed
+    island."""
+    matched_ids = {x for ids in matches.values() for x in ids}
+    listed = {}
+    for (ref, _), ids in matches.items():
+        for t, i in ids:
+            shape = load_geometry(t, i, cache) if t != "node" else None
+            if shape is not None and not shape.is_empty:
+                listed.setdefault(ref, []).append(shape.simplify(0.001))
+    all_listed = [s for shapes in listed.values() for s in shapes]
+    tree = STRtree(all_listed)
+
+    candidates = {}
+    for ref, elements in in_boxes.items():
+        boxes = [s.bounds for s in listed.get(ref, [])]
+        for el in elements:
+            key = (el["type"], el["id"])
+            if key in matched_ids or el["type"] == "node" or areas.get(key, 0) < MIN_UNLISTED_AREA:
+                continue
+            x1, y1, x2, y2 = bounds_of(el)
+            if any(x1 <= bx2 + NEAR_DEGREES and x2 >= bx1 - NEAR_DEGREES and
+                   y1 <= by2 + NEAR_DEGREES and y2 >= by1 - NEAR_DEGREES for bx1, by1, bx2, by2 in boxes):
+                candidates.setdefault(ref, []).append(el)
+    print(f"{sum(map(len, candidates.values()))} unlisted islands near listed ones to check", flush=True)
+    fetch_geometry({(el["type"], el["id"]) for els in candidates.values() for el in els}, areas, cache)
+
+    nearest = {}  # (osm type, id) -> (distance, ref, element, shape)
+    for ref, elements in candidates.items():
+        for el in elements:
+            key = (el["type"], el["id"])
+            shape = load_geometry(el["type"], el["id"], cache)
+            if shape is None or shape.is_empty or shape.area < MIN_UNLISTED_AREA:
+                continue
+            inside = shape.representative_point()
+            if any(all_listed[j].contains(inside) for j in tree.query(inside)):
+                continue  # in a lake on a listed island - not IOTA
+            distance = min(s.distance(shape) for s in listed[ref])
+            if distance <= NEAR_DEGREES and (key not in nearest or distance < nearest[key][0]):
+                nearest[key] = (distance, ref, el, shape)
+
+    result = {}
+    for _, ref, el, shape in nearest.values():
+        tags = el.get("tags", {})
+        result.setdefault((ref, tags.get("name:en") or tags.get("name")), []).append(shape)
+    return result
 
 
 def qlever(query):
@@ -352,26 +424,45 @@ def main(src, cache, out_path):
     with open(src, encoding="utf-8") as f:
         groups = json.load(f)
 
-    matches, points, areas = find_matches(groups, cache)
+    matches, points, areas, in_boxes = find_matches(groups, cache)
     fetch_geometry({x for ids in matches.values() for x in ids}, areas, cache)
+
+    def entry(ref, island, shapes, pts, listed=True):
+        # Unlisted islands at ~100 m: they're only there to say which group
+        # a station near a listed island is in.
+        shapes = [simplify(s, SIMPLIFY_DEGREES if listed else 2 * SIMPLIFY_DEGREES)
+                  for s in shapes if s is not None and not s.is_empty]
+        if not shapes and not pts:
+            return None
+        polys = [p for s in shapes for p in rings(s)]
+        xs = [v for poly in polys for v in poly[0][0::2]] + [p[0] for p in pts]
+        ys = [v for poly in polys for v in poly[0][1::2]] + [p[1] for p in pts]
+        e = {"ref": ref, "island": island,
+             "minLon": min(xs), "minLat": min(ys), "maxLon": max(xs), "maxLat": max(ys),
+             "polys": polys, "points": pts}
+        if not listed:
+            e["listed"] = False
+        return e
 
     islands = []
     missing = 0
     for (ref, island), ids in sorted(matches.items()):
-        shapes = [load_geometry(t, i, cache) for t, i in ids if t != "node"]
-        shapes = [simplify(s) for s in shapes if s is not None and not s.is_empty]
-        pts = [[round(c, 5) for c in points[i]] for t, i in ids if t == "node"]
-        if not shapes and not pts:
+        e = entry(ref, island,
+                  [load_geometry(t, i, cache) for t, i in ids if t != "node"],
+                  [[round(c, 5) for c in points[i]] for t, i in ids if t == "node"])
+        if e:
+            islands.append(e)
+        else:
             missing += 1
-            continue
-        polys = [p for s in shapes for p in rings(s)]
-        xs = [v for poly in polys for v in poly[0][0::2]] + [p[0] for p in pts]
-        ys = [v for poly in polys for v in poly[0][1::2]] + [p[1] for p in pts]
-        islands.append({
-            "ref": ref, "island": island,
-            "minLon": min(xs), "minLat": min(ys), "maxLon": max(xs), "maxLat": max(ys),
-            "polys": polys, "points": pts,
-        })
+
+    unlisted = find_unlisted(matches, areas, in_boxes, cache)
+    for (ref, name), shapes in sorted(unlisted.items()):
+        e = entry(ref, name,
+                  [s for s in shapes if not isinstance(s, Point)],
+                  [[round(s.x, 5), round(s.y, 5)] for s in shapes if isinstance(s, Point)],
+                  listed=False)
+        if e:
+            islands.append(e)
 
     output = {
         "_source": "Island outlines from OpenStreetMap (ODbL), matched by name to the IOTA directory "
@@ -381,7 +472,8 @@ def main(src, cache, out_path):
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(output, f, ensure_ascii=False, separators=(",", ":"))
     total = sum(len([i for s in g["sub_groups"] for i in s["islands"]]) for g in groups)
-    print(f"{len(islands)} of {total} IOTA islands located ({missing} matched with no usable outline) -> {out_path}")
+    print(f"{len(islands) - len(unlisted)} of {total} IOTA islands located ({missing} matched with no usable "
+          f"outline), plus {len(unlisted)} unlisted ones near them -> {out_path}")
 
 
 if __name__ == "__main__":

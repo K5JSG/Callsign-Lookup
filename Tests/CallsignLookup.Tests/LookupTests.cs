@@ -325,6 +325,27 @@ namespace CallsignLookup.Tests
             Assert.Equal("", match.Note);
         }
 
+        [Fact]
+        public void Find_UnlistedIslandNearAListedOne()
+        {
+            // KH8WW - on Aunu'u, 1.5 km off Tutuila. IOTA lists only Tutuila for OC-045.
+            var match = IotaService.Find(-14.284231, -170.554665, 9, "");
+            Assert.NotNull(match);
+            Assert.Equal("OC-045 - Tutuila Island", match.Reference);
+            Assert.StartsWith("Aunu", match.Island);
+            Assert.Contains("check it counts", match.Note);
+        }
+
+        [Fact]
+        public void Find_LakeIslandIsStillTheBigIsland()
+        {
+            // Inchmurrin, in Loch Lomond - not IOTA; the station is on Great Britain.
+            var match = IotaService.Find(56.0405, -4.5755, 279, "");
+            Assert.NotNull(match);
+            Assert.Equal("EU-005 - Great Britain", match.Reference);
+            Assert.Equal("Great Britain", match.Island);
+        }
+
         [Theory]
         [InlineData(40.42, -3.70, 281)]   // Madrid - mainland
         [InlineData(51.50, -0.12, 245)]   // London's location with an Irish DXCC - EU-005 doesn't count for EI
@@ -345,6 +366,20 @@ namespace CallsignLookup.Tests
         [Fact]
         public void Find_IgnoresQrzIotaThatIsntReal() =>
             Assert.Null(IotaService.Find(40.42, -3.70, 281, "XX-999"));
+
+        [Fact]
+        public void NewIslands_ListsIslandsIotaAdded()
+        {
+            const string shipped = """
+                [{"refno":"OC-045","sub_groups":[{"islands":[{"island_name":"Tutuila"}]}]}]
+                """;
+            const string downloaded = """
+                [{"refno":"OC-045","sub_groups":[{"islands":[{"island_name":"Tutuila"},{"island_name":"Aunu'u"}]}]},
+                 {"refno":"OC-999","sub_groups":[{"islands":[{"island_name":"New Rock"}]}]}]
+                """;
+            Assert.Equal(["OC-045 Aunu'u", "OC-999 New Rock"], IotaService.NewIslands(shipped, downloaded));
+            Assert.Empty(IotaService.NewIslands(downloaded, downloaded));
+        }
 
         [Fact]
         public void ParseList_FixesLongitudesAndTheAntimeridian()

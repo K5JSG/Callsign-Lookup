@@ -28,6 +28,7 @@ namespace CallsignLookup
         /// </summary>
         private void InitializeComponent()
         {
+            lblIotaUpdate = new Label();
             topPanel = new TableLayoutPanel();
             lblCallsign = new Label();
             txtCallsign = new TextBox();
@@ -127,6 +128,20 @@ namespace CallsignLookup
             btnQrzLogin.Text = "&QRZ Login...";
             btnQrzLogin.UseVisualStyleBackColor = true;
             btnQrzLogin.Click += BtnQrzLogin_Click;
+            //
+            // lblIotaUpdate
+            //
+            // Shown by MainForm when IOTA has added islands this version's
+            // island data doesn't have.
+            lblIotaUpdate.AutoSize = true;
+            lblIotaUpdate.BackColor = Color.FromArgb(255, 243, 205);
+            lblIotaUpdate.Dock = DockStyle.Top;
+            lblIotaUpdate.ForeColor = Color.FromArgb(102, 77, 3);
+            lblIotaUpdate.MaximumSize = new Size(740, 0);
+            lblIotaUpdate.Name = "lblIotaUpdate";
+            lblIotaUpdate.Padding = new Padding(8, 6, 8, 6);
+            lblIotaUpdate.TabIndex = 4;
+            lblIotaUpdate.Visible = false;
             //
             // resultsPanel
             //
@@ -357,6 +372,7 @@ namespace CallsignLookup
             Controls.Add(resultsPanel);
             Controls.Add(bottomPanel);
             Controls.Add(topPanel);
+            Controls.Add(lblIotaUpdate);
             Controls.Add(statusStrip);
             MinimumSize = new Size(620, 427);
             Name = "MainForm";
@@ -377,6 +393,7 @@ namespace CallsignLookup
 
         #endregion
 
+        private Label lblIotaUpdate;
         private TableLayoutPanel topPanel;
         private Label lblCallsign;
         private TextBox txtCallsign;
