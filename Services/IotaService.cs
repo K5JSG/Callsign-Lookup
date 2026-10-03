@@ -207,7 +207,7 @@ namespace CallsignLookup.Services
             var on = nearby
                 .Where(i => PolygonMath.Contains(i.Polys, lon, lat))
                 .MinBy(i => i.BoxArea);
-            if (on != null) return Match(on, groups[on.Ref], "");
+            if (on != null) return Match(on, groups[on.Ref], "", qrzIota);
 
             var closest = nearby
                 .Select(i => (Island: i, Distance: Math.Sqrt(DistanceSquared(i, lon, lat))))
@@ -217,21 +217,28 @@ namespace CallsignLookup.Services
             if (closest.Island is IslandShape island)
             {
                 // Only an islet OSM maps as a point can't contain the location.
-                return Match(island, groups[island.Ref], island.Polys.Count > 0 ? $"Location is just off {island.Island}" : "");
+                return Match(island, groups[island.Ref], island.Polys.Count > 0 ? $"Location is just off {island.Island}" : "", qrzIota);
             }
 
             return FromQrz(qrzIota, "Location isn't on a listed IOTA island");
         }
 
-        private static IotaMatch Match(IslandShape island, IotaGroup group, string note)
+        private static IotaMatch Match(IslandShape island, IotaGroup group, string note, string qrzIota)
         {
             if (!island.Listed)
-            {
-                string unlisted = $"{island.Island} isn't on IOTA's island list for {group.Ref} - check it counts";
-                note = note.Length > 0 ? $"{note}. {unlisted}" : unlisted;
-            }
+                note = AddNote(note, $"{island.Island} isn't on IOTA's island list for {group.Ref} - check it counts");
+
+            // The QRZ record naming a different group usually means one of its
+            // grid/location and its IOTA field is wrong (FW1P: address and IOTA
+            // say Wallis, the grid is on Futuna). The location still wins.
+            if (FindGroup(qrzIota) is IotaGroup qrzGroup && !qrzGroup.Ref.Equals(group.Ref, StringComparison.OrdinalIgnoreCase))
+                note = AddNote(note, $"QRZ record says {qrzGroup.Ref} ({qrzGroup.Name}), but its location is on " +
+                                     $"{island.Island} ({group.Ref}) - check which is right");
+
             return new IotaMatch(group.Ref, group.Name, island.Island, note);
         }
+
+        private static string AddNote(string note, string more) => note.Length > 0 ? $"{note}. {more}" : more;
 
         private static double DistanceSquared(IslandShape island, double lon, double lat)
         {

@@ -73,6 +73,17 @@ namespace CallsignLookup.Services
             return true;
         }
 
+        // A typed or pasted locator in the usual form - "AH16" or "AH16xx" -
+        // cut to 6 characters. Doesn't check it's valid; TryGetCenter does.
+        public static string Normalize(string grid)
+        {
+            string g = grid.Trim();
+            if (g.Length > 6) g = g[..6];
+            return g.Length > 4
+                ? g[..4].ToUpperInvariant() + g[4..].ToLowerInvariant()
+                : g.ToUpperInvariant();
+        }
+
         public static string FormatCoordinate(double value) =>
             value.ToString("0.000000", CultureInfo.InvariantCulture);
     }

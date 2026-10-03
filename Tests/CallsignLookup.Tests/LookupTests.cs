@@ -364,6 +364,46 @@ namespace CallsignLookup.Tests
         }
 
         [Fact]
+        public void Find_WarnsWhenQrzIotaDisagrees()
+        {
+            // FW1P - QRZ says OC-054 (Wallis), but the grid, AH05wr, is on Futuna.
+            var match = IotaService.Find(-14.270833, -178.125, 298, "OC-054");
+            Assert.NotNull(match);
+            Assert.Equal("OC-118", match.RefNo);
+            Assert.Equal("Futuna", match.Island);
+            Assert.Contains("QRZ record says OC-054", match.Note);
+        }
+
+        [Fact]
+        public void Find_NoWarningWhenQrzIotaAgrees()
+        {
+            var match = IotaService.Find(29.395, -13.50, 29, "af-004");
+            Assert.NotNull(match);
+            Assert.Equal("", match.Note);
+        }
+
+        [Fact]
+        public void ResolveAtGrid_UsesTheEnteredGridNotQrzs()
+        {
+            // FW1P's record has grid AH05wr (Futuna); the right grid, on Wallis, puts it on OC-054.
+            var record = new QrzCallsignRecord { Call = "FW1P", Dxcc = 298, Grid = "AH05wr", Latitude = -14.270833, Longitude = -178.125, Iota = "OC-054" };
+            var result = CallsignLookupService.ResolveAtGrid(record, " ah16VR ");
+            Assert.NotNull(result);
+            Assert.Equal("AH16vr", result.GridSquare);
+            Assert.Equal("OC-054", result.Iota?.RefNo);
+            Assert.Equal("", result.Iota?.Note);
+            Assert.Contains("entered", result.LocationSource);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("AH1")]
+        [InlineData("ZZ16")]
+        [InlineData("AH16zz")]
+        public void ResolveAtGrid_RejectsInvalidGrids(string grid) =>
+            Assert.Null(CallsignLookupService.ResolveAtGrid(new QrzCallsignRecord(), grid));
+
+        [Fact]
         public void Find_IgnoresQrzIotaThatIsntReal() =>
             Assert.Null(IotaService.Find(40.42, -3.70, 281, "XX-999"));
 

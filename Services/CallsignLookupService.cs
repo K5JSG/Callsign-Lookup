@@ -56,6 +56,23 @@ namespace CallsignLookup.Services
                 };
             }
 
+            return Resolve(record, lat.Value, lon.Value, source, Maidenhead.ToGridSquare(lat.Value, lon.Value));
+        }
+
+        // The same, but from a grid square the user typed in place of the
+        // QRZ record's location (FW1P: the record's grid is on Futuna, the
+        // station is on Wallis). Everything else - DXCC entity, state, the
+        // QRZ IOTA field - still comes from the record. Null if the grid
+        // isn't a valid 4- or 6-character locator.
+        public static LookupResult? ResolveAtGrid(QrzCallsignRecord record, string grid)
+        {
+            string normalized = Maidenhead.Normalize(grid);
+            if (!Maidenhead.TryGetCenter(normalized, out double lat, out double lon)) return null;
+            return Resolve(record, lat, lon, $"Center of grid {normalized} (entered, not from QRZ)", normalized);
+        }
+
+        private static LookupResult Resolve(QrzCallsignRecord record, double lat, double lon, string source, string gridSquare)
+        {
             // Counties only for US stations - and for those, always one (the
             // nearest, if the point is just outside every outline). Anywhere
             // else, Canada included, has no county.
@@ -63,12 +80,12 @@ namespace CallsignLookup.Services
             ArrlSectionMatch? section = null;
             if (record.IsUnitedStates)
             {
-                county = CountyLookupService.FindCounty(lat.Value, lon.Value, record.State);
+                county = CountyLookupService.FindCounty(lat, lon, record.State);
                 if (county != null) section = ArrlSectionService.FromUsCounty(county);
             }
             else if (record.IsCanadian && record.State.Length > 0)
             {
-                section = ArrlSectionService.FromCanadianStation(record.State, lat.Value, lon.Value);
+                section = ArrlSectionService.FromCanadianStation(record.State, lat, lon);
             }
 
             return new LookupResult
@@ -77,12 +94,12 @@ namespace CallsignLookup.Services
                 Latitude = lat,
                 Longitude = lon,
                 LocationSource = source,
-                GridSquare = Maidenhead.ToGridSquare(lat.Value, lon.Value),
+                GridSquare = gridSquare,
                 County = county,
-                CqZone = ZoneLookupService.FindCqZone(lat.Value, lon.Value),
-                ItuZone = ZoneLookupService.FindItuZone(lat.Value, lon.Value),
+                CqZone = ZoneLookupService.FindCqZone(lat, lon),
+                ItuZone = ZoneLookupService.FindItuZone(lat, lon),
                 ArrlSection = section,
-                Iota = IotaService.Find(lat.Value, lon.Value, record.Dxcc, record.Iota),
+                Iota = IotaService.Find(lat, lon, record.Dxcc, record.Iota),
             };
         }
 

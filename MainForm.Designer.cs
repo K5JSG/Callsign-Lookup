@@ -196,9 +196,13 @@ namespace CallsignLookup
             //
             txtGridSquare.Anchor = AnchorStyles.Left | AnchorStyles.Right;
             txtGridSquare.Font = new Font("Segoe UI", 11F);
+            txtGridSquare.MaxLength = 10;
             txtGridSquare.Name = "txtGridSquare";
-            txtGridSquare.ReadOnly = true;
             txtGridSquare.TabIndex = 1;
+            txtGridSquare.TextChanged += TxtGridSquare_TextChanged;
+            txtGridSquare.KeyDown += TxtGridSquare_KeyDown;
+            txtGridSquare.Enter += TxtGridSquare_Enter;
+            txtGridSquare.Leave += TxtGridSquare_Leave;
             //
             // lblCounty
             //

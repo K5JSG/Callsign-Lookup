@@ -8,6 +8,10 @@ namespace CallsignLookup
         private readonly AppSettings _settings;
         private QrzService? _qrz;
 
+        // The last lookup, so a grid square typed into the Grid Square box can
+        // be worked out against the same QRZ record.
+        private LookupResult? _lastResult;
+
         public MainForm()
         {
             InitializeComponent();
@@ -97,6 +101,7 @@ namespace CallsignLookup
             {
                 _qrz ??= new QrzService(_settings.QrzUsername, _settings.GetQrzPassword());
                 var result = await new CallsignLookupService(_qrz).LookupAsync(callsign);
+                _lastResult = result;
                 ShowResult(result);
                 string status = $"Found {result.Qrz.Call}.";
                 // Worth knowing when the lat/long isn't QRZ's own.
@@ -125,6 +130,57 @@ namespace CallsignLookup
             }
         }
 
+        // The Grid Square box is editable: paste or type the right grid (when
+        // the QRZ record's is wrong) and everything is worked out again from
+        // its center. A complete 6-character grid updates as soon as it's in;
+        // Enter takes a 4-character one too.
+        private void TxtGridSquare_TextChanged(object? sender, EventArgs e)
+        {
+            if (Maidenhead.Normalize(txtGridSquare.Text).Length == 6) ApplyEnteredGrid(quiet: true);
+        }
+
+        private void TxtGridSquare_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.Enter) return;
+            e.SuppressKeyPress = true;
+            ApplyEnteredGrid(quiet: false);
+        }
+
+        // Enter in the grid box means "use this grid", not "look up the callsign".
+        private void TxtGridSquare_Enter(object? sender, EventArgs e) => AcceptButton = null;
+
+        private void TxtGridSquare_Leave(object? sender, EventArgs e) => AcceptButton = btnLookup;
+
+        private void ApplyEnteredGrid(bool quiet)
+        {
+            string grid = Maidenhead.Normalize(txtGridSquare.Text);
+            if (grid.Length == 0) return;
+            // Already showing this grid's results - including when ShowResult
+            // has just put it in the box.
+            if (_lastResult != null && grid.Equals(_lastResult.GridSquare, StringComparison.OrdinalIgnoreCase)) return;
+
+            // With no callsign looked up there's no DXCC entity or state, so
+            // no county or section - but the zones and island still work.
+            var record = _lastResult?.Qrz ?? new QrzCallsignRecord();
+            var result = CallsignLookupService.ResolveAtGrid(record, grid);
+            if (result == null)
+            {
+                if (!quiet) UpdateStatus($"\"{txtGridSquare.Text.Trim()}\" isn't a valid 4- or 6-character grid square.");
+                return;
+            }
+
+            _lastResult = result;
+            int caret = txtGridSquare.SelectionStart;
+            ShowResult(result);
+            txtGridSquare.SelectionStart = Math.Min(caret, txtGridSquare.TextLength);
+
+            string status = record.Call.Length > 0
+                ? $"{record.Call} worked out from grid {grid} (entered), not QRZ's location."
+                : $"Worked out from grid {grid} (entered) - no callsign looked up, so no county or section.";
+            if (result.Iota?.Note.Length > 0) status += $"  IOTA: {result.Iota.Note}.";
+            UpdateStatus(status);
+        }
+
         private void ShowResult(LookupResult result)
         {
             txtGridSquare.Text = Dash(result.GridSquare);
@@ -143,6 +199,7 @@ namespace CallsignLookup
 
         private void ClearResults()
         {
+            _lastResult = null;
             foreach (var (_, box) in ResultFields) box.Clear();
             btnCopy.Enabled = false;
         }
