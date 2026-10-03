@@ -19,7 +19,7 @@ namespace CallsignLookup.Services
     //     groups show up without a new release), or failing that the one
     //     shipped in Data\iota.json.
     //   * Data\iotaIslands.json - the outline of each island on a group's
-    //     island list, plus the unlisted islands within ~10 km of those, from
+    //     island list, plus the unlisted islands within ~5 km of those, from
     //     OpenStreetMap (built by Tools/build_iota_islands.py).
     //
     // A station is on an island when its location is inside one of those

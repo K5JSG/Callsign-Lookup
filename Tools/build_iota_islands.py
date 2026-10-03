@@ -23,6 +23,16 @@ The IOTA directory has island names but no locations, so:
 Overpass responses are cached in <cache dir>, so an interrupted run (the
 public Overpass servers are often busy) picks up where it left off.
 
+A full build takes hours (most of it listing the world's islands on
+Overpass). When IOTA has only added a few islands - the app's yellow
+"IOTA has added N new islands" bar - use --update instead: it compares
+the current IOTA list with Data/iota.json (the list Data/iotaIslands.json
+was built from), rebuilds only the groups whose islands or box changed,
+searching just those groups' boxes (on QLever, so it doesn't need the
+often-overloaded Overpass servers at all), and writes both files back into
+Data/. Minutes, not hours. Then build and release a new version as usual.
+Do a full build now and then anyway, to pick up OSM coastline fixes.
+
 Input (download first): the IOTA full list from
   https://www.iota-world.org/islands-on-the-air/downloads/download-file.html?path=fulllist.json
 
@@ -30,6 +40,9 @@ Requires: pip install shapely
 
 Usage:
   python build_iota_islands.py <fulllist.json> <cache dir> <out.json>
+  python build_iota_islands.py --update <cache dir> [<fulllist.json>] [--data <Data dir>]
+    (--update downloads the current list when no fulllist.json is given;
+     --data defaults to the repo's Data folder)
 """
 
 import json
@@ -46,6 +59,10 @@ import urllib.request
 from shapely import wkt
 from shapely import STRtree
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon
+
+IOTA_LIST_URL = ("https://www.iota-world.org/islands-on-the-air/downloads/download-file.html"
+                 "?path=fulllist.json")
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "Data")
 
 # The main public server. When busy it answers 504 quickly, so retrying it
 # beats waiting out a mirror that may not answer at all.
@@ -233,6 +250,82 @@ def world_islands(groups, cache):
     for n, (south, west) in enumerate(tiles, 1):
         print(f"Named islands, tile {n}/{len(tiles)} ({south},{west})...", flush=True)
         elements += islands_in_box(south, west, TILE, cache)
+    return unique_islands(elements)
+
+
+# The tags --update needs from each island: the ones osm_name_keys reads.
+NAME_TAG_REGEX = "^(name|alt_name|official_name|short_name|old_name|loc_name|int_name)$|^(name|alt_name|official_name):"
+OSM_KEY = "https://www.openstreetmap.org/wiki/Key:"
+
+
+def tsv_value(v):
+    """A QLever TSV cell -> plain text: '"Uvea"' -> 'Uvea', '"1.5"^^<...>' -> '1.5'."""
+    if v.startswith('"'):
+        v = v[1:v.rindex('"')]
+        return v.replace("\\t", "\t").replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
+    return v
+
+
+def islands_in_rect(south, west, north, east, cache):
+    """Named islands centred in one box (west <= east), cached, in the same
+    shape Overpass's "out tags bb" gives - --update's version of
+    islands_in_box. From QLever, since the public Overpass servers are
+    often too busy to answer at all; its whole-world scan for the island
+    centres takes ~20 s whatever the box."""
+    path = os.path.join(cache, "tags", f"rect{south:.2f}_{west:.2f}_{north:.2f}_{east:.2f}.json")
+    if not os.path.exists(path):
+        rows = qlever(f"""PREFIX osmkey: <{OSM_KEY}>
+PREFIX geo: <http://www.opengis.net/ont/geosparql#>
+PREFIX geof: <http://www.opengis.net/def/function/geosparql/>
+SELECT ?osm ?minx ?miny ?maxx ?maxy ?key ?value WHERE {{
+  ?osm osmkey:place ?place . FILTER(?place = "island" || ?place = "islet")
+  ?osm osmkey:name ?name .
+  ?osm geo:hasGeometry/geo:asWKT ?wkt .
+  BIND(geof:minX(?wkt) AS ?minx) BIND(geof:minY(?wkt) AS ?miny)
+  BIND(geof:maxX(?wkt) AS ?maxx) BIND(geof:maxY(?wkt) AS ?maxy)
+  FILTER((?minx + ?maxx) / 2 >= {west} && (?minx + ?maxx) / 2 <= {east} &&
+         (?miny + ?maxy) / 2 >= {south} && (?miny + ?maxy) / 2 <= {north})
+  ?osm ?key ?value .
+  FILTER(STRSTARTS(STR(?key), "{OSM_KEY}") && REGEX(SUBSTR(STR(?key), {len(OSM_KEY) + 1}), "{NAME_TAG_REGEX}"))
+}}""")
+        elements = {}
+        for osm, minx, miny, maxx, maxy, key, value in rows:
+            kind, osm_id = osm.strip("<>").rsplit("/", 2)[-2:]
+            el = elements.get((kind, osm_id))
+            if el is None:
+                x1, y1, x2, y2 = (float(tsv_value(v)) for v in (minx, miny, maxx, maxy))
+                el = {"type": kind, "id": int(osm_id), "tags": {}}
+                if kind == "node":
+                    el["lon"], el["lat"] = x1, y1
+                else:
+                    el["bounds"] = {"minlon": x1, "minlat": y1, "maxlon": x2, "maxlat": y2}
+                elements[(kind, osm_id)] = el
+            el["tags"][key.strip("<>")[len(OSM_KEY):]] = tsv_value(value)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"elements": list(elements.values())}, f)
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)["elements"]
+
+
+def group_islands(groups, cache):
+    """Every named island/islet in OSM in these groups' boxes - the same
+    as world_islands, but only searching where it has to."""
+    os.makedirs(os.path.join(cache, "tags"), exist_ok=True)
+    elements = []
+    for n, g in enumerate(groups, 1):
+        print(f"Named islands, {g['refno']} ({n}/{len(groups)})...", flush=True)
+        south, north = sorted((float(g["latitude_min"]), float(g["latitude_max"])))
+        west, east = lon_range(float(g["longitude_min"]), float(g["longitude_max"]))
+        south, north = max(-90.0, south - BOX_MARGIN), min(90.0, north + BOX_MARGIN)
+        spans = [(west, east)] if west <= east else [(west, 180.0), (-180.0, east)]
+        for w, e in spans:
+            elements += islands_in_rect(round(south, 2), round(max(-180.0, w - BOX_MARGIN), 2),
+                                        round(north, 2), round(min(180.0, e + BOX_MARGIN), 2), cache)
+    return unique_islands(elements)
+
+
+def unique_islands(elements):
+    """-> [(element, center lon, center lat, box area)], once each."""
     unique = {}
     for el in elements:
         if "lat" in el:
@@ -245,9 +338,10 @@ def world_islands(groups, cache):
     return list(unique.values())
 
 
-def find_matches(groups, cache):
+def find_matches(groups, cache, world=None):
     """-> {(ref, island name): set of (osm type, id)} plus node points."""
-    world = world_islands(groups, cache)
+    if world is None:
+        world = world_islands(groups, cache)
     matches, points, areas, in_boxes = {}, {}, {}, {}
     for n, g in enumerate(groups, 1):
         ref = g["refno"]
@@ -287,10 +381,11 @@ def bounds_of(el):
     return el["lon"], el["lat"], el["lon"], el["lat"]
 
 
-def find_unlisted(matches, areas, in_boxes, cache):
+def find_unlisted(matches, areas, in_boxes, cache, others=()):
     """Named islands near a group's listed ones but not on its list ->
     {(ref, OSM name): [shapes]}, each with the group of its nearest listed
-    island."""
+    island. others: listed islands of groups not being built (--update) -
+    an island in a lake on one, or nearer one, isn't added."""
     matched_ids = {x for ids in matches.values() for x in ids}
     listed = {}
     for (ref, _), ids in matches.items():
@@ -298,8 +393,10 @@ def find_unlisted(matches, areas, in_boxes, cache):
             shape = load_geometry(t, i, cache) if t != "node" else None
             if shape is not None and not shape.is_empty:
                 listed.setdefault(ref, []).append(shape.simplify(0.001))
-    all_listed = [s for shapes in listed.values() for s in shapes]
+    others = list(others)
+    all_listed = [s for shapes in listed.values() for s in shapes] + others
     tree = STRtree(all_listed)
+    others_tree = STRtree(others) if others else None
 
     candidates = {}
     for ref, elements in in_boxes.items():
@@ -326,6 +423,10 @@ def find_unlisted(matches, areas, in_boxes, cache):
             if any(all_listed[j].contains(inside) for j in tree.query(inside)):
                 continue  # in a lake on a listed island - not IOTA
             distance = min(s.distance(shape) for s in listed[ref])
+            if others_tree is not None and any(
+                    others[j].distance(shape) < distance
+                    for j in others_tree.query(shape.buffer(NEAR_DEGREES).envelope)):
+                continue  # belongs with a group that isn't being rebuilt
             if distance <= NEAR_DEGREES and (key not in nearest or distance < nearest[key][0]):
                 nearest[key] = (distance, ref, el, shape)
 
@@ -420,50 +521,52 @@ def rings(geometry):
     return out
 
 
-def main(src, cache, out_path):
-    with open(src, encoding="utf-8") as f:
-        groups = json.load(f)
+def make_entry(ref, island, shapes, pts, listed=True):
+    # Unlisted islands at ~100 m: they're only there to say which group
+    # a station near a listed island is in.
+    shapes = [simplify(s, SIMPLIFY_DEGREES if listed else 2 * SIMPLIFY_DEGREES)
+              for s in shapes if s is not None and not s.is_empty]
+    if not shapes and not pts:
+        return None
+    polys = [p for s in shapes for p in rings(s)]
+    xs = [v for poly in polys for v in poly[0][0::2]] + [p[0] for p in pts]
+    ys = [v for poly in polys for v in poly[0][1::2]] + [p[1] for p in pts]
+    e = {"ref": ref, "island": island,
+         "minLon": min(xs), "minLat": min(ys), "maxLon": max(xs), "maxLat": max(ys),
+         "polys": polys, "points": pts}
+    if not listed:
+        e["listed"] = False
+    return e
 
-    matches, points, areas, in_boxes = find_matches(groups, cache)
+
+def build_entries(groups, cache, world=None, others=()):
+    """The islands file's entries for these groups -> (listed entries,
+    unlisted entries, number matched in OSM with no usable outline)."""
+    matches, points, areas, in_boxes = find_matches(groups, cache, world)
     fetch_geometry({x for ids in matches.values() for x in ids}, areas, cache)
 
-    def entry(ref, island, shapes, pts, listed=True):
-        # Unlisted islands at ~100 m: they're only there to say which group
-        # a station near a listed island is in.
-        shapes = [simplify(s, SIMPLIFY_DEGREES if listed else 2 * SIMPLIFY_DEGREES)
-                  for s in shapes if s is not None and not s.is_empty]
-        if not shapes and not pts:
-            return None
-        polys = [p for s in shapes for p in rings(s)]
-        xs = [v for poly in polys for v in poly[0][0::2]] + [p[0] for p in pts]
-        ys = [v for poly in polys for v in poly[0][1::2]] + [p[1] for p in pts]
-        e = {"ref": ref, "island": island,
-             "minLon": min(xs), "minLat": min(ys), "maxLon": max(xs), "maxLat": max(ys),
-             "polys": polys, "points": pts}
-        if not listed:
-            e["listed"] = False
-        return e
-
-    islands = []
-    missing = 0
+    listed, missing = [], 0
     for (ref, island), ids in sorted(matches.items()):
-        e = entry(ref, island,
-                  [load_geometry(t, i, cache) for t, i in ids if t != "node"],
-                  [[round(c, 5) for c in points[i]] for t, i in ids if t == "node"])
+        e = make_entry(ref, island,
+                       [load_geometry(t, i, cache) for t, i in ids if t != "node"],
+                       [[round(c, 5) for c in points[i]] for t, i in ids if t == "node"])
         if e:
-            islands.append(e)
+            listed.append(e)
         else:
             missing += 1
 
-    unlisted = find_unlisted(matches, areas, in_boxes, cache)
-    for (ref, name), shapes in sorted(unlisted.items()):
-        e = entry(ref, name,
-                  [s for s in shapes if not isinstance(s, Point)],
-                  [[round(s.x, 5), round(s.y, 5)] for s in shapes if isinstance(s, Point)],
-                  listed=False)
+    unlisted = []
+    for (ref, name), shapes in sorted(find_unlisted(matches, areas, in_boxes, cache, others).items()):
+        e = make_entry(ref, name,
+                       [s for s in shapes if not isinstance(s, Point)],
+                       [[round(s.x, 5), round(s.y, 5)] for s in shapes if isinstance(s, Point)],
+                       listed=False)
         if e:
-            islands.append(e)
+            unlisted.append(e)
+    return listed, unlisted, missing
 
+
+def write_islands(islands, out_path):
     output = {
         "_source": "Island outlines from OpenStreetMap (ODbL), matched by name to the IOTA directory "
                    "(iota-world.org). Built by Tools/build_iota_islands.py.",
@@ -471,10 +574,121 @@ def main(src, cache, out_path):
     }
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(output, f, ensure_ascii=False, separators=(",", ":"))
+
+
+def main(src, cache, out_path):
+    with open(src, encoding="utf-8") as f:
+        groups = json.load(f)
+
+    listed, unlisted, missing = build_entries(groups, cache)
+    write_islands(listed + unlisted, out_path)
     total = sum(len([i for s in g["sub_groups"] for i in s["islands"]]) for g in groups)
-    print(f"{len(islands) - len(unlisted)} of {total} IOTA islands located ({missing} matched with no usable "
+    print(f"{len(listed)} of {total} IOTA islands located ({missing} matched with no usable "
           f"outline), plus {len(unlisted)} unlisted ones near them -> {out_path}")
 
 
+def group_signature(g):
+    """What the islands file depends on for a group: its box, entities and
+    island list. A group whose signature changed has to be rebuilt."""
+    islands = sorted((i["island_name"].strip(), i.get("excluded", "0"))
+                     for s in g["sub_groups"] for i in s["islands"])
+    return (g["refno"].strip(), g["name"].strip(), g["dxcc_num"],
+            g["latitude_min"], g["latitude_max"], g["longitude_min"], g["longitude_max"], islands)
+
+
+def entry_shape(e):
+    """An islands-file entry back into a shape (None for an islet that's
+    only a point)."""
+    polys = []
+    for poly in e["polys"]:
+        rs = [list(zip(r[0::2], r[1::2])) for r in poly]
+        if len(rs[0]) >= 4:
+            polys.append(Polygon(rs[0], [r for r in rs[1:] if len(r) >= 4]))
+    if not polys:
+        return None
+    shape = MultiPolygon(polys) if len(polys) > 1 else polys[0]
+    return shape if shape.is_valid else shape.buffer(0)
+
+
+def update(cache, new_list=None, data_dir=DATA_DIR):
+    """Rebuilds only the groups that changed since Data/iota.json - see the
+    top of the file."""
+    list_path = os.path.join(data_dir, "iota.json")
+    islands_path = os.path.join(data_dir, "iotaIslands.json")
+    os.makedirs(cache, exist_ok=True)
+
+    if new_list:
+        with open(new_list, encoding="utf-8") as f:
+            new_text = f.read()
+    else:
+        print("Downloading the current IOTA list...", flush=True)
+        req = urllib.request.Request(IOTA_LIST_URL, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            new_text = resp.read().decode("utf-8")
+    new_groups = json.loads(new_text)
+    with open(list_path, encoding="utf-8") as f:
+        old_groups = json.load(f)
+
+    old_sigs = {g["refno"].strip(): group_signature(g) for g in old_groups}
+    changed = [g for g in new_groups if old_sigs.get(g["refno"].strip()) != group_signature(g)]
+    changed_refs = {g["refno"].strip() for g in changed}
+    removed = set(old_sigs) - {g["refno"].strip() for g in new_groups}
+    if not changed and not removed:
+        print("Nothing has changed since Data/iota.json - the island data is up to date.")
+        return
+    print(f"{len(changed)} groups changed: {', '.join(sorted(changed_refs)) or '-'}"
+          + (f"; removed: {', '.join(sorted(removed))}" if removed else ""), flush=True)
+
+    with open(islands_path, encoding="utf-8") as f:
+        existing = json.load(f)["islands"]
+    kept = [e for e in existing if e["ref"] not in changed_refs | removed]
+    others = [s for s in (entry_shape(e) for e in kept if e.get("listed", True)) if s is not None]
+
+    listed, unlisted, missing = (build_entries(changed, cache, group_islands(changed, cache), others)
+                                 if changed else ([], [], 0))
+
+    # An island the other groups had as unlisted that a changed group now
+    # lists by name is that group's now.
+    new_shapes = [s for s in (entry_shape(e) for e in listed) if s is not None]
+    if new_shapes:
+        tree = STRtree(new_shapes)
+
+        def now_listed(e):
+            shape = entry_shape(e)
+            if shape is None:
+                return False
+            p = shape.representative_point()
+            return any(new_shapes[j].contains(p) for j in tree.query(p))
+        kept = [e for e in kept if e.get("listed", True) or not now_listed(e)]
+
+    def key(e):
+        return e["ref"], e["island"]
+    write_islands(sorted([e for e in kept if e.get("listed", True)] + listed, key=key)
+                  + sorted([e for e in kept if not e.get("listed", True)] + unlisted, key=key),
+                  islands_path)
+    with open(list_path, "w", encoding="utf-8", newline="") as f:
+        f.write(new_text)
+
+    found = {(e["ref"], e["island"]) for e in listed}
+    not_found = [f"{g['refno'].strip()} {i['island_name'].strip()}" for g in changed
+                 for s in g["sub_groups"] for i in s["islands"]
+                 if i.get("excluded", "0") == "0" and (g["refno"], i["island_name"].strip()) not in found]
+    print(f"Rebuilt {len(changed_refs)} groups: {len(listed)} islands located ({missing} with no usable "
+          f"outline), {len(unlisted)} unlisted ones near them. Wrote {islands_path} and {list_path}.")
+    if not_found:
+        print(f"{len(not_found)} listed islands in those groups aren't in OSM under their IOTA name, "
+              f"so the app can't place stations on them: {', '.join(not_found[:20])}"
+              + (", ..." if len(not_found) > 20 else ""))
+
+
 if __name__ == "__main__":
-    main(*sys.argv[1:4])
+    args = sys.argv[1:]
+    if args and args[0] == "--update":
+        data = DATA_DIR
+        if "--data" in args:
+            i = args.index("--data")
+            data = args[i + 1]
+            del args[i:i + 2]
+        update(args[1], args[2] if len(args) > 2 else None, data)
+    else:
+        main(*args[:3])
