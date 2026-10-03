@@ -547,6 +547,9 @@ def build_entries(groups, cache, world=None, others=()):
 
     listed, missing = [], 0
     for (ref, island), ids in sorted(matches.items()):
+        # ids is a set, whose order changes from run to run (string hashes
+        # are randomised), so sort it to make every build byte-identical.
+        ids = sorted(ids)
         e = make_entry(ref, island,
                        [load_geometry(t, i, cache) for t, i in ids if t != "node"],
                        [[round(c, 5) for c in points[i]] for t, i in ids if t == "node"])
