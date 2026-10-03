@@ -33,7 +33,7 @@ Map data: Ontario census divisions © Statistics Canada ([Open Government Licenc
 
 ## Installation
 
-Download the latest installer from the [Releases](https://github.com/K5JSG/Callsign-Lookup/releases) page and run it. The app is self-contained: no separate .NET runtime install is required. Installing a new version first removes the old one, so there's only ever one entry in Installed apps; your saved QRZ login is kept.
+Download the latest installer from the [Releases](https://github.com/K5JSG/Callsign-Lookup/releases) page and run it. The app is self-contained: no separate .NET runtime install is required. Installing a new version upgrades the existing copy in place: Installed apps keeps a single entry that shows the new version, the desktop and Start menu shortcuts stay where they are, and files the new version no longer uses are removed. Any other copy of the app installed separately (e.g. an older per-user install) is uninstalled. Your saved QRZ login is kept.
 
 You'll need a [QRZ.com](https://www.qrz.com/) account. The first time the app runs it asks for your QRZ username and password.
 
