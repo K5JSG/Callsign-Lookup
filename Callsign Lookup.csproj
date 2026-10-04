@@ -15,7 +15,7 @@
     <Description>Looks up a callsign on QRZ.com and works out the station's 6-character grid square, county, CQ zone, ITU zone, ARRL section and IOTA island from its location.</Description>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <ApplicationIcon>logo.ico</ApplicationIcon>
-    <Version>1.4.1</Version>
+    <Version>1.4.2</Version>
   </PropertyGroup>
 
   <ItemGroup>

@@ -80,9 +80,12 @@ Source: "..\..\publish\Data\*.json"; DestDir: "{app}\Data"; Flags: ignoreversion
 Source: "..\..\License.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
+; The desktop shortcut must come BEFORE the Start menu ones. When it was
+; created after them, every upgrade made Explorer drop the desktop icon into
+; the next free spot instead of leaving it where the user had put it.
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName} now"; \
