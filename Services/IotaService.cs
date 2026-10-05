@@ -91,7 +91,11 @@ namespace CallsignLookup.Services
         public static string DownloadedListPath => Path.Combine(AppSettings.Folder, ListFileName);
 
         // Called after IotaListUpdater saves a newer list.
-        public static void ReloadList() => _groups = null;
+        public static void ReloadList()
+        {
+            _groups = null;
+            _islandIds = null;
+        }
 
         // Islands in the downloaded IOTA list that weren't in the one shipped
         // in Data\ - which is the list Data\iotaIslands.json was built from,
@@ -185,6 +189,12 @@ namespace CallsignLookup.Services
             return (lo, hi);
         }
 
+        // Whether a location is inside (or near) the area IOTA gives for a
+        // group - so it could be on one of its islands, even one the island
+        // data hasn't got. False for a reference that isn't on the list.
+        public static bool CouldBeIn(string refNo, double lat, double lon) =>
+            FindGroup(refNo) is IotaGroup group && group.Contains(lat, lon, BoxMargin);
+
         internal static IotaGroup? FindGroup(string refNo) =>
             Groups.FirstOrDefault(g => g.Ref.Equals(refNo.Trim(), StringComparison.OrdinalIgnoreCase));
 
@@ -249,6 +259,49 @@ namespace CallsignLookup.Services
                 best = Math.Min(best, dx * dx + dy * dy);
             }
             return best;
+        }
+
+        // IOTA's id for an island on a group's list ("NA-062", "Key West" ->
+        // "4766") - what HRD Logbook stores for the island. Null for an island
+        // that isn't on the list.
+        public static string? IslandId(string refNo, string island)
+        {
+            _islandIds ??= LoadIslandIds();
+            return _islandIds.TryGetValue(IslandKey(refNo, island), out string? id) ? id : null;
+        }
+
+        private static Dictionary<string, string>? _islandIds;
+
+        private static string IslandKey(string refNo, string island) =>
+            $"{refNo.Trim()}|{island.Trim()}".ToUpperInvariant();
+
+        private static Dictionary<string, string> LoadIslandIds()
+        {
+            try
+            {
+                if (File.Exists(DownloadedListPath))
+                    return ParseIslandIds(File.ReadAllText(DownloadedListPath));
+            }
+            catch (Exception ex) when (IsBadList(ex) || ex is IOException or UnauthorizedAccessException)
+            {
+                // Damaged download - the shipped copy will do.
+            }
+            return ParseIslandIds(File.ReadAllText(DataFiles.PathFor(ListFileName)));
+        }
+
+        internal static Dictionary<string, string> ParseIslandIds(string json)
+        {
+            using var doc = JsonDocument.Parse(json);
+            var ids = new Dictionary<string, string>();
+            foreach (var g in doc.RootElement.EnumerateArray())
+            {
+                string refNo = g.GetProperty("refno").GetString() ?? "";
+                foreach (var sub in g.GetProperty("sub_groups").EnumerateArray())
+                    foreach (var island in sub.GetProperty("islands").EnumerateArray())
+                        ids.TryAdd(IslandKey(refNo, island.GetProperty("island_name").GetString() ?? ""),
+                                   island.GetProperty("id").GetString() ?? "");
+            }
+            return ids;
         }
 
         // The group on the QRZ record, if it's a real IOTA reference.

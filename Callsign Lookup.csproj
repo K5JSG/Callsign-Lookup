@@ -8,6 +8,9 @@
     <AssemblyName>Callsign Lookup</AssemblyName>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- UI Automation (System.Windows.Automation), used to fill in HRD
+         Logbook's log entry window - see Services/Hrd/HrdEditWindow.cs. -->
+    <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Authors>Jeremy S. Gaynor, K5JSG</Authors>
     <Company>K5JSG</Company>
@@ -15,7 +18,7 @@
     <Description>Looks up a callsign on QRZ.com and works out the station's 6-character grid square, county, CQ zone, ITU zone, ARRL section and IOTA island from its location.</Description>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <ApplicationIcon>logo.ico</ApplicationIcon>
-    <Version>1.4.2</Version>
+    <Version>1.5.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,6 +37,13 @@
     <Compile Remove="Tests\**" />
     <EmbeddedResource Remove="Tests\**" />
     <None Remove="Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- UseWPF drops these two from the implicit usings (WPF has types of
+         the same names); this app uses no WPF types, so put them back. -->
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
   </ItemGroup>
 
   <ItemGroup>

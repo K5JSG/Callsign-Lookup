@@ -10,11 +10,36 @@ A Windows desktop tool that looks up an amateur radio callsign on [QRZ.com](http
 - **ARRL/RAC section**
 - **IOTA reference and island**, e.g. `AF-004 - Canary Islands` / `Alegranza`, or `EU-005 - Great Britain` / `Great Britain` for anywhere in England, Scotland or Wales
 
-Each result is in its own read-only box: copy one with Ctrl+C or right-click → Copy, or all of them with **Copy All**.
+Each result is in its own read-only box: copy one with Ctrl+C or right-click → Copy, or all of them with **Copy All**. **Clear** empties the window.
 
 The **Grid Square** box is the exception: if the grid on the QRZ record is wrong, paste or type the right one there, and every field is worked out again from the centre of that grid. Everything else, such as the DXCC entity and state, still comes from the QRZ record. A 6-character grid takes effect as soon as it's complete; press Enter for a 4-character one. Use 6 characters for islands, because the centre of a 4-character square is often out at sea.
 
+If you log with HRD Logbook, it can also fill in the QSO you have open there: see [Filling in a QSO in HRD Logbook](#filling-in-a-qso-in-hrd-logbook).
+
 Built by Jeremy S. Gaynor, K5JSG.
+
+## Filling in a QSO in HRD Logbook
+
+If you log with [Ham Radio Deluxe](https://www.hamradiodeluxe.com/) Logbook, Callsign Lookup can do the per-QSO cleanup in HRD's log entry window for you.
+
+1. Open the QSO in HRD (Edit, or a new one in Add). Within a couple of seconds Callsign Lookup shows "*CALL* open" in its **HRD Logbook** row, puts the callsign in its box and looks it up. Opening another QSO, or changing or deleting the callsign in HRD, does the same.
+2. Do HRD's own Lookup as usual.
+3. Pick where you're operating from under **Working from**. These are HRD's My Station profiles (Tools > Configure > My Station). The choice is remembered.
+4. Click **Fill HRD QSO**, and leave HRD alone until the report appears. In order, it:
+   - checks name, QTH, state and US county against QRZ (for a POTA QSO the state and county are the park's instead), and fills any that are blank or don't match (a name with HRD's quoted nickname, `WILLIAM "Bill" HAMALAINEN`, matches);
+   - takes POTA park references out of the Comment (`US-3033`, `POTA: US-4579 & US-4566`) and puts them in the POTA field in place of whatever was there, with the park's name and location from HRD's own park list. Several parks go in as a comma list, like HRD's "Multiple POTAs"; the first park is the one entered, so the POTA tab and the QSO get its name and location. This only happens when the Comment holds nothing but park references: a Comment with any other text is a real comment, so it's left alone and the report says so;
+   - re-selects the My Station profile;
+   - sets the QSO's location to the park (or, for no park, the QRZ location), and from that the grid square, CQ and ITU zones and ARRL section, worked out as in the main window;
+   - clears the distance and presses HRD's Recalc (HRD measures grid square centre to grid square centre, from your My Station locator);
+   - clears QSL Manager/VIA;
+   - sets the IOTA reference and island if the location is on one.
+5. The report lists every field that had a different value (to verify), every blank field it filled in, the My Station fields the profile changed, notes, and anything HRD wouldn't take. Then:
+   - **Approve - Update in HRD** presses Update (F7) in HRD's window, saving the QSO;
+   - **Close** leaves the QSO open in HRD, unsaved, to finish there. Cancel in HRD throws the changes away.
+
+Only blank fields and ones that don't match are changed; a location within about 100 m of the right one is left alone. If QRZ's page for the callsign is for a different callsign (a portable or changed call), it asks before going on. An IOTA reference in HRD for a group nowhere near the location is cleared; one whose area the location is in (it could be a small island the island data hasn't got) is only flagged.
+
+Callsign Lookup fills HRD's window through Windows UI Automation, the same interface screen readers use, so HRD needs no add-ons or settings. It only reads the description and callsign of your My Station profiles, not the passwords stored with them. Tested with HRD Logbook 6.9.
 
 ## How it works
 
@@ -58,7 +83,10 @@ This publishes a self-contained, single-file executable plus its `Data` folder t
 
 | Path | What it is |
 |------|------------|
-| `MainForm.cs`, `QrzLoginForm.cs` | The WinForms UI |
+| `MainForm.cs`, `QrzLoginForm.cs`, `HrdFillReportForm.cs` | The WinForms UI |
+| `Services/Hrd/HrdQsoFiller.cs` | Works out what an HRD QSO needs and fills it in, in the order above |
+| `Services/Hrd/HrdEditWindow.cs` | Reads and fills HRD Logbook's log entry window through UI Automation |
+| `Services/Hrd/HrdPotaParks.cs`, `HrdStationProfiles.cs` | HRD's POTA park list and My Station profiles |
 | `AppLogo.cs`, `logo.ico`, `logo-256.png` | Program icon and window logo, built into the exe (`Logo.png` is the full-size source artwork) |
 | `Services/QrzService.cs` | QRZ XML client: login, session key reuse, re-login on timeout |
 | `Services/CallsignLookupService.cs` | Callsign → location → grid/county/zones/section |
@@ -70,7 +98,7 @@ This publishes a self-contained, single-file executable plus its `Data` folder t
 | `Services/OntarioDivisionService.cs` | Offline Ontario census division lookup (for Ontario sections) |
 | `Services/PolygonMath.cs` | Point-in-polygon and distance math shared by the lookups |
 | `Data/` | Boundary and section data shipped next to the exe |
-| `Tests/CallsignLookup.Tests` | xUnit tests (reference locations, QRZ response parsing) |
+| `Tests/CallsignLookup.Tests` | xUnit tests (reference locations, QRZ response parsing, HRD fill planning) |
 | `Installer/InnoSetup/` | Inno Setup installer script (built by `build.ps1`) |
 | `Tools/build_ontario_divisions.py` | Regenerates `Data/ontarioDivisions.json` (instructions inside) |
 | `Tools/build_iota_islands.py` | Regenerates `Data/iotaIslands.json` from OpenStreetMap: a full build, or `--update` for just the groups IOTA has changed (instructions inside) |

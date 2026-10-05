@@ -52,13 +52,21 @@ namespace CallsignLookup
             lblIsland = new Label();
             txtIsland = new TextBox();
             pictureBoxLogo = new PictureBox();
+            hrdPanel = new FlowLayoutPanel();
+            lblHrd = new Label();
+            lblHrdQso = new Label();
+            lblWorkingFrom = new Label();
+            cbxStationProfile = new ComboBox();
+            btnFillHrd = new Button();
             bottomPanel = new FlowLayoutPanel();
             btnCopy = new Button();
+            btnClear = new Button();
             statusStrip = new StatusStrip();
             lblStatus = new ToolStripStatusLabel();
             topPanel.SuspendLayout();
             resultsPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBoxLogo).BeginInit();
+            hrdPanel.SuspendLayout();
             bottomPanel.SuspendLayout();
             statusStrip.SuspendLayout();
             SuspendLayout();
@@ -328,10 +336,82 @@ namespace CallsignLookup
             pictureBoxLogo.TabIndex = 12;
             pictureBoxLogo.TabStop = false;
             //
+            // hrdPanel
+            //
+            hrdPanel.AutoSize = true;
+            hrdPanel.Controls.Add(lblHrd);
+            hrdPanel.Controls.Add(lblHrdQso);
+            hrdPanel.Controls.Add(lblWorkingFrom);
+            hrdPanel.Controls.Add(cbxStationProfile);
+            hrdPanel.Controls.Add(btnFillHrd);
+            hrdPanel.Dock = DockStyle.Bottom;
+            hrdPanel.Location = new Point(0, 316);
+            hrdPanel.Name = "hrdPanel";
+            hrdPanel.Padding = new Padding(8, 4, 8, 0);
+            hrdPanel.Size = new Size(740, 41);
+            hrdPanel.TabIndex = 5;
+            hrdPanel.WrapContents = false;
+            //
+            // lblHrd
+            //
+            lblHrd.Anchor = AnchorStyles.Left;
+            lblHrd.AutoSize = true;
+            lblHrd.Font = new Font(Font, FontStyle.Bold);
+            lblHrd.Location = new Point(11, 14);
+            lblHrd.Name = "lblHrd";
+            lblHrd.Size = new Size(83, 15);
+            lblHrd.TabIndex = 0;
+            lblHrd.Text = "HRD Logbook:";
+            //
+            // lblHrdQso
+            //
+            lblHrdQso.Anchor = AnchorStyles.Left;
+            lblHrdQso.AutoSize = true;
+            lblHrdQso.Location = new Point(100, 14);
+            lblHrdQso.MinimumSize = new Size(190, 0);
+            lblHrdQso.Name = "lblHrdQso";
+            lblHrdQso.Size = new Size(190, 15);
+            lblHrdQso.TabIndex = 1;
+            lblHrdQso.Text = "no QSO open";
+            //
+            // lblWorkingFrom
+            //
+            lblWorkingFrom.Anchor = AnchorStyles.Left;
+            lblWorkingFrom.AutoSize = true;
+            lblWorkingFrom.Location = new Point(296, 14);
+            lblWorkingFrom.Name = "lblWorkingFrom";
+            lblWorkingFrom.Size = new Size(85, 15);
+            lblWorkingFrom.TabIndex = 2;
+            lblWorkingFrom.Text = "Working from:";
+            //
+            // cbxStationProfile
+            //
+            cbxStationProfile.Anchor = AnchorStyles.Left;
+            cbxStationProfile.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbxStationProfile.Location = new Point(387, 10);
+            cbxStationProfile.Name = "cbxStationProfile";
+            cbxStationProfile.Size = new Size(200, 23);
+            cbxStationProfile.TabIndex = 3;
+            cbxStationProfile.SelectedIndexChanged += CbxStationProfile_SelectedIndexChanged;
+            //
+            // btnFillHrd
+            //
+            btnFillHrd.Anchor = AnchorStyles.Left;
+            btnFillHrd.AutoSize = true;
+            btnFillHrd.Enabled = false;
+            btnFillHrd.Location = new Point(593, 7);
+            btnFillHrd.Name = "btnFillHrd";
+            btnFillHrd.Size = new Size(110, 27);
+            btnFillHrd.TabIndex = 4;
+            btnFillHrd.Text = "&Fill HRD QSO";
+            btnFillHrd.UseVisualStyleBackColor = true;
+            btnFillHrd.Click += BtnFillHrd_Click;
+            //
             // bottomPanel
             //
             bottomPanel.AutoSize = true;
             bottomPanel.Controls.Add(btnCopy);
+            bottomPanel.Controls.Add(btnClear);
             bottomPanel.Dock = DockStyle.Bottom;
             bottomPanel.FlowDirection = FlowDirection.RightToLeft;
             bottomPanel.Location = new Point(0, 357);
@@ -351,6 +431,17 @@ namespace CallsignLookup
             btnCopy.Text = "&Copy All";
             btnCopy.UseVisualStyleBackColor = true;
             btnCopy.Click += BtnCopy_Click;
+            //
+            // btnClear
+            //
+            btnClear.AutoSize = true;
+            btnClear.Location = new Point(323, 7);
+            btnClear.Name = "btnClear";
+            btnClear.Size = new Size(110, 27);
+            btnClear.TabIndex = 1;
+            btnClear.Text = "C&lear";
+            btnClear.UseVisualStyleBackColor = true;
+            btnClear.Click += BtnClear_Click;
             //
             // statusStrip
             //
@@ -372,13 +463,14 @@ namespace CallsignLookup
             AcceptButton = btnLookup;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(740, 388);
+            ClientSize = new Size(740, 429);
             Controls.Add(resultsPanel);
+            Controls.Add(hrdPanel);
             Controls.Add(bottomPanel);
             Controls.Add(topPanel);
             Controls.Add(lblIotaUpdate);
             Controls.Add(statusStrip);
-            MinimumSize = new Size(620, 427);
+            MinimumSize = new Size(740, 468);
             Name = "MainForm";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "Callsign Lookup";
@@ -387,6 +479,8 @@ namespace CallsignLookup
             ((System.ComponentModel.ISupportInitialize)pictureBoxLogo).EndInit();
             resultsPanel.ResumeLayout(false);
             resultsPanel.PerformLayout();
+            hrdPanel.ResumeLayout(false);
+            hrdPanel.PerformLayout();
             bottomPanel.ResumeLayout(false);
             bottomPanel.PerformLayout();
             statusStrip.ResumeLayout(false);
@@ -421,8 +515,15 @@ namespace CallsignLookup
         private Label lblIsland;
         private TextBox txtIsland;
         private PictureBox pictureBoxLogo;
+        private FlowLayoutPanel hrdPanel;
+        private Label lblHrd;
+        private Label lblHrdQso;
+        private Label lblWorkingFrom;
+        private ComboBox cbxStationProfile;
+        private Button btnFillHrd;
         private FlowLayoutPanel bottomPanel;
         private Button btnCopy;
+        private Button btnClear;
         private StatusStrip statusStrip;
         private ToolStripStatusLabel lblStatus;
     }

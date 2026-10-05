@@ -12,6 +12,7 @@ namespace CallsignLookup.Services
         public string Call { get; init; } = "";
         public string FirstName { get; init; } = "";
         public string LastName { get; init; } = "";
+        public string Nickname { get; init; } = "";
         public string Address1 { get; init; } = "";
         public string City { get; init; } = "";        // QRZ's "addr2"
         public string State { get; init; } = "";
@@ -31,6 +32,13 @@ namespace CallsignLookup.Services
         public string Land { get; init; } = "";         // DXCC entity name of the callsign
 
         public string FullName => $"{FirstName} {LastName}".Trim();
+
+        // The name as HRD Logbook's QRZ lookup writes it: the nickname in
+        // quotes after the first name - WILLIAM "Bill" HAMALAINEN.
+        public string NameWithNickname =>
+            Nickname.Length == 0 || FirstName.Contains(Nickname, StringComparison.OrdinalIgnoreCase)
+                ? FullName
+                : $"{FirstName} \"{Nickname}\" {LastName}".Trim();
 
         // Every DXCC entity that has counties in counties.json: the lower 48
         // plus the entities that are separate for DXCC but still US states or
@@ -151,6 +159,7 @@ namespace CallsignLookup.Services
                 Call = Child(callsign, "call"),
                 FirstName = Child(callsign, "fname"),
                 LastName = Child(callsign, "name"),
+                Nickname = Child(callsign, "nickname"),
                 Address1 = Child(callsign, "addr1"),
                 City = Child(callsign, "addr2"),
                 State = Child(callsign, "state"),

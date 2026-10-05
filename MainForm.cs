@@ -1,5 +1,6 @@
 using System.Text;
 using CallsignLookup.Services;
+using CallsignLookup.Services.Hrd;
 
 namespace CallsignLookup
 {
@@ -12,6 +13,15 @@ namespace CallsignLookup
         // be worked out against the same QRZ record.
         private LookupResult? _lastResult;
 
+        // HRD Logbook's open Edit/Add window, watched so its callsign is
+        // looked up as soon as a QSO is opened there.
+        private readonly System.Windows.Forms.Timer _hrdTimer = new() { Interval = 1000 };
+        private HrdEditWindow? _hrdWindow;
+        private string _hrdQsoKey = "";     // callsign + date + time of the QSO last shown
+        private string _hrdSeenKey = "";    // ... and of the one seen on the last check
+        private bool _hrdChecking, _hrdFilling;
+        private int _hrdTicks;
+
         public MainForm()
         {
             InitializeComponent();
@@ -23,6 +33,10 @@ namespace CallsignLookup
             UpdateStatus(_settings.HasQrzLogin
                 ? $"QRZ login: {_settings.QrzUsername}"
                 : "Click \"QRZ Login...\" to enter your QRZ.com username and password.");
+
+            LoadStationProfiles();
+            _hrdTimer.Tick += HrdTimer_Tick;
+            _hrdTimer.Start();
         }
 
         protected override void OnShown(EventArgs e)
@@ -93,7 +107,13 @@ namespace CallsignLookup
                 return;
             }
 
-            if (!_settings.HasQrzLogin && !PromptForQrzLogin()) return;
+            await LookupAsync(callsign);
+        }
+
+        // True when the lookup found the callsign.
+        private async Task<bool> LookupAsync(string callsign)
+        {
+            if (!_settings.HasQrzLogin && !PromptForQrzLogin()) return false;
 
             SetBusy(true);
             UpdateStatus($"Looking up {callsign} on QRZ...");
@@ -110,6 +130,7 @@ namespace CallsignLookup
                 if (result.Iota?.Note.Length > 0) status += $"  IOTA: {result.Iota.Note}.";
                 if (_qrz.LoginMessage.Length > 0) status += $"  QRZ: {_qrz.LoginMessage}";
                 UpdateStatus(status);
+                return true;
             }
             catch (QrzException ex)
             {
@@ -128,6 +149,7 @@ namespace CallsignLookup
             {
                 SetBusy(false);
             }
+            return false;
         }
 
         // The Grid Square box is editable: paste or type the right grid (when
@@ -219,6 +241,17 @@ namespace CallsignLookup
 
         private static string Dash(string value) => value.Length > 0 ? value : "-";
 
+        // Empties the window - callsign and results. HRD isn't touched, and
+        // the QSO open there (if any) isn't looked up again until another
+        // one is opened or its callsign changes.
+        private void BtnClear_Click(object? sender, EventArgs e)
+        {
+            txtCallsign.Clear();
+            ClearResults();
+            UpdateStatus("Cleared.");
+            txtCallsign.Focus();
+        }
+
         private void BtnCopy_Click(object? sender, EventArgs e)
         {
             var sb = new StringBuilder();
@@ -232,7 +265,161 @@ namespace CallsignLookup
         {
             btnLookup.Enabled = !busy;
             btnQrzLogin.Enabled = !busy;
+            btnFillHrd.Enabled = !busy && _hrdWindow != null;
             UseWaitCursor = busy;
+        }
+
+        // ---- HRD Logbook ----------------------------------------------------
+
+        private void LoadStationProfiles()
+        {
+            var profiles = HrdStationProfiles.Load();
+            cbxStationProfile.Items.Clear();
+            foreach (var profile in profiles) cbxStationProfile.Items.Add(profile);
+            cbxStationProfile.SelectedItem = profiles.FirstOrDefault(p => p.DisplayName == _settings.HrdStationProfile)
+                                             ?? profiles.FirstOrDefault();
+            cbxStationProfile.Enabled = profiles.Count > 0;
+        }
+
+        private void CbxStationProfile_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (cbxStationProfile.SelectedItem is not HrdStationProfile profile ||
+                profile.DisplayName == _settings.HrdStationProfile) return;
+            _settings.HrdStationProfile = profile.DisplayName;
+            _settings.Save();
+        }
+
+        // Every second: which QSO is open in HRD? When it changes - another
+        // QSO opened, or the callsign edited or deleted - and has stayed the
+        // same for a second (so typing a callsign doesn't look up every
+        // letter), it's looked up, ready for when the user has done HRD's own
+        // Lookup. A blank callsign clears the results.
+        private async void HrdTimer_Tick(object? sender, EventArgs e)
+        {
+            if (_hrdChecking || _hrdFilling) return;
+            _hrdChecking = true;
+            try
+            {
+                // Looking for the window means searching all of HRD's main
+                // window (log grid and all), so between full searches every
+                // 5 seconds the one already found is just re-read.
+                var known = _hrdTicks++ % 5 == 0 ? null : _hrdWindow;
+                var (window, call, key) = await Task.Run(() => ReadOpenQso(known));
+                _hrdWindow = window;
+                btnFillHrd.Enabled = window != null && btnLookup.Enabled;
+                if (window == null)
+                {
+                    lblHrdQso.Text = "no QSO open";
+                    _hrdQsoKey = _hrdSeenKey = "";
+                    return;
+                }
+
+                lblHrdQso.Text = call.Length > 0 ? $"{call} open" : "QSO open, no callsign";
+                bool settled = key == _hrdSeenKey;
+                _hrdSeenKey = key;
+                if (!settled || key == _hrdQsoKey) return;
+                if (!btnLookup.Enabled) return; // a lookup is running - try again next time
+                _hrdQsoKey = key;
+
+                txtCallsign.Text = call;
+                if (call.Length == 0)
+                {
+                    ClearResults();
+                    UpdateStatus("The QSO open in HRD has no callsign.");
+                    return;
+                }
+                await LookupAsync(call);
+            }
+            finally
+            {
+                _hrdChecking = false;
+            }
+        }
+
+        // The fields are read straight from the window each time (not from
+        // cached controls), so another QSO shown in it is picked up.
+        private static (HrdEditWindow? Window, string Call, string Key) ReadOpenQso(HrdEditWindow? known)
+        {
+            try
+            {
+                var window = known is { IsOpen: true } ? known : HrdEditWindow.Find();
+                if (window == null) return (null, "", "");
+                string call = (window.ReadTopField("edtCALL") ?? "").ToUpperInvariant();
+                string key = $"{call}|{window.ReadTopField("edtQSO_DATE")}|{window.ReadTopField("edtTIME_ON")}";
+                return (window, call, key);
+            }
+            catch (Exception ex) when (ex is System.Windows.Automation.ElementNotAvailableException
+                                           or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                return (null, "", "");
+            }
+        }
+
+        private async void BtnFillHrd_Click(object? sender, EventArgs e)
+        {
+            if (_hrdWindow is not HrdEditWindow window || !window.IsOpen)
+            {
+                UpdateStatus("No QSO is open in HRD Logbook - open it there first.");
+                return;
+            }
+            string call = (await Task.Run(() => window.Read("edtCALL")) ?? "").ToUpperInvariant();
+            if (call.Length == 0)
+            {
+                UpdateStatus("The QSO open in HRD has no callsign.");
+                return;
+            }
+
+            // Always a fresh lookup of the callsign that's open, in case it
+            // was changed in HRD since it was opened.
+            txtCallsign.Text = call;
+            if (!await LookupAsync(call) || _lastResult is not LookupResult lookup) return;
+
+            if (!lookup.Qrz.Call.Equals(call, StringComparison.OrdinalIgnoreCase) &&
+                MessageBox.Show(this,
+                    $"QRZ's page for {call} is the record for {lookup.Qrz.Call}.\n\n" +
+                    "That's normal for a portable or changed callsign, but it can also mean it's the wrong station. " +
+                    $"Fill in the QSO from {lookup.Qrz.Call}'s QRZ record anyway?",
+                    "QRZ record doesn't match", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return;
+
+            var profile = cbxStationProfile.SelectedItem as HrdStationProfile;
+            _hrdFilling = true;
+            SetBusy(true);
+            UpdateStatus($"Filling in {call} in HRD - leave HRD alone until it's done...");
+            try
+            {
+                var report = await Task.Run(() =>
+                {
+                    var qso = HrdQsoFiller.ReadQso(window);
+                    var plan = HrdQsoFiller.Plan(qso, lookup, HrdPotaParks.Find, profile);
+                    return HrdQsoFiller.Apply(window, plan);
+                });
+                int changed = report.Applied.Count(a => a.Took);
+                UpdateStatus($"{call}: {changed} field{(changed == 1 ? "" : "s")} filled in HRD" +
+                             (report.Problems.Count > 0 ? $", {report.Problems.Count} to do by hand" : "") +
+                             " - check it, then press Update in HRD.");
+                using var dialog = new HrdFillReportForm(report);
+                switch (dialog.ShowDialog(this))
+                {
+                    case DialogResult.Yes:
+                        UpdateStatus($"Saving {call} in HRD...");
+                        bool saved = await Task.Run(window.PressUpdateAndWait);
+                        UpdateStatus(saved
+                            ? $"{call} saved in HRD."
+                            : $"Pressed Update for {call}, but HRD's window is still open - check HRD.");
+                        break;
+                }
+            }
+            catch (Exception ex) when (ex is HrdException or System.Windows.Automation.ElementNotAvailableException
+                                           or InvalidOperationException)
+            {
+                UpdateStatus($"Couldn't finish filling in HRD: {ex.Message}");
+            }
+            finally
+            {
+                _hrdFilling = false;
+                SetBusy(false);
+            }
         }
 
         private void UpdateStatus(string text) => lblStatus.Text = text;

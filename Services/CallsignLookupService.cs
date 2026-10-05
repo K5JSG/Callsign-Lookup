@@ -71,6 +71,11 @@ namespace CallsignLookup.Services
             return Resolve(record, lat, lon, $"Center of grid {normalized} (entered, not from QRZ)", normalized);
         }
 
+        // The same for a location that isn't the QRZ record's - a POTA park
+        // the station worked from.
+        public static LookupResult ResolveAt(QrzCallsignRecord record, double lat, double lon, string source) =>
+            Resolve(record, lat, lon, source, Maidenhead.ToGridSquare(lat, lon));
+
         private static LookupResult Resolve(QrzCallsignRecord record, double lat, double lon, string source, string gridSquare)
         {
             // Counties only for US stations - and for those, always one (the

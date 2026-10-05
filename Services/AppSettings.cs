@@ -2,13 +2,17 @@ using System.Text.Json;
 
 namespace CallsignLookup.Services
 {
-    // The user's QRZ login, kept in %LocalAppData%\Callsign Lookup\settings.json.
+    // The user's QRZ login (and HRD "Working from" choice), kept in %LocalAppData%\Callsign Lookup\settings.json.
     // The password is stored DPAPI-encrypted (see DpapiProtector), so the file
     // is useless to anyone but this Windows user on this PC.
     public sealed class AppSettings
     {
         public string QrzUsername { get; set; } = "";
         public string QrzPasswordProtected { get; set; } = "";
+
+        // The HRD My Station profile last picked under "Working from", as
+        // HRD lists it ("Home - K5JSG").
+        public string HrdStationProfile { get; set; } = "";
 
         private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
