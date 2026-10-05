@@ -20,7 +20,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Version = "1.5.0",
+    [string]$Version = "1.5.1",
     [switch]$SkipInstaller
 )
 
@@ -55,6 +55,7 @@ dotnet publish $project `
     -r win-x64 `
     --self-contained true `
     -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:Version=$Version `
     -p:FileVersion="$Version.0" `
     -p:AssemblyVersion="$Version.0" `
@@ -64,6 +65,12 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }
 
 $exe = Join-Path $publishDir "Callsign Lookup.exe"
 if (-not (Test-Path $exe)) { throw "Published exe not found at $exe" }
+
+# The installer ships only the exe and Data\, so a native DLL left next to the
+# exe (WPF's UI Automation needs four) would be missing on installed PCs and
+# crash the app at startup. IncludeNativeLibrariesForSelfExtract bundles them.
+$looseDlls = Get-ChildItem $publishDir -Filter *.dll
+if ($looseDlls) { throw "Loose DLLs next to the exe would not be installed: $($looseDlls.Name -join ', ')" }
 
 $sizeMb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
 Write-Host ""
