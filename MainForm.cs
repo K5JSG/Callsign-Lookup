@@ -25,6 +25,7 @@ namespace CallsignLookup
         public MainForm()
         {
             InitializeComponent();
+            Text = $"Callsign Lookup {Application.ProductVersion.Split('+')[0]}";
             Icon = AppLogo.Icon ?? Icon;
             pictureBoxLogo.Image = AppLogo.Image;
             // The warning bar wraps to the window's width.
@@ -409,6 +410,7 @@ namespace CallsignLookup
                              (report.Problems.Count > 0 ? $", {report.Problems.Count} to do by hand" : "") +
                              " - check it, then press Update in HRD.");
                 using var dialog = new HrdFillReportForm(report);
+                PlaceAbove(dialog);
                 switch (dialog.ShowDialog(this))
                 {
                     case DialogResult.Yes:
@@ -433,5 +435,20 @@ namespace CallsignLookup
         }
 
         private void UpdateStatus(string text) => lblStatus.Text = text;
+
+        // The report goes in front of this window, even with "Stay on top"
+        // on, and half an inch higher than it, so its title bar is clear
+        // of this one and easy to grab.
+        private void PlaceAbove(Form dialog)
+        {
+            dialog.TopMost = TopMost;
+            dialog.StartPosition = FormStartPosition.Manual;
+            var area = Screen.FromControl(this).WorkingArea;
+            int x = Left + (Width - dialog.Width) / 2;
+            int y = Top - DeviceDpi / 2;
+            dialog.Location = new Point(
+                Math.Max(area.Left, Math.Min(x, area.Right - dialog.Width)),
+                Math.Max(area.Top, Math.Min(y, area.Bottom - dialog.Height)));
+        }
     }
 }

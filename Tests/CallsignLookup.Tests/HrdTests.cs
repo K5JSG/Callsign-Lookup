@@ -81,6 +81,7 @@ namespace CallsignLookup.Tests
         {
             "US-3033" => Lockhart,
             "US-4566" => new PotaPark("US-4566", "Second Park", "US-TX", 30.0, -97.0, "EM10ia"),
+            "US-2068" => new PotaPark("US-2068", "Hamlin Beach State Park", "US-NY", 43.3619, -77.9574, "FN13ai", 291),
             "CA-0792" => new PotaPark("CA-0792", "Parlee Beach Provincial Park", "CA-NB", 46.2395, -64.5101, "FN76rf", 1),
             "DL-0001" => new PotaPark("DL-0001", "Jasmund National Park", "DL", 54.5434, 13.6211, "JO64ln", 230),
             _ => null,
@@ -95,6 +96,7 @@ namespace CallsignLookup.Tests
             ["edtQTH"] = "Kyle",
             ["edtSTATE"] = "TX",
             ["edtCNTY"] = "Hays",
+            ["cbxLocationStateProvince"] = "TX",
             ["memCOMMENT"] = "US-3033",
             ["edtPOTA_REF"] = "",
             ["edtPOTA_REF2"] = "",
@@ -214,6 +216,14 @@ namespace CallsignLookup.Tests
         }
 
         [Theory]
+        [InlineData("KL4RL/W2", "KL4RL")]
+        [InlineData("VE3/KL4RL", "KL4RL")]
+        [InlineData("K5JSG/P", "K5JSG")]
+        [InlineData("W5ERX", "W5ERX")]
+        public void HomeCall_IsTheLongestPart(string call, string home) =>
+            Assert.Equal(home, CallsignLookupService.HomeCall(call));
+
+        [Theory]
         [InlineData("KL4RL/VE9", "KL4RL", true)]
         [InlineData("VE9/KL4RL", "KL4RL", true)]
         [InlineData("K5JSG/P", "K5JSG", true)]
@@ -222,6 +232,29 @@ namespace CallsignLookup.Tests
         [InlineData("N1ABC", "N1ABD", false)]
         public void SameStation_HomeCallOfAPortableCall(string call, string qrzCall, bool same) =>
             Assert.Equal(same, HrdQsoFiller.SameStation(call, qrzCall));
+
+        // KL4RL (no /) at a New York park: HRD says Alaska from the prefix.
+        // Changing the Country empties HRD's state picker, so the state and
+        // county are set again even though they looked right before.
+        [Fact]
+        public void PotaQso_CountryChange_SetsStatePickerThenCounty()
+        {
+            var qso = Kl4rlQso();
+            qso["edtCALL"] = "KL4RL";
+            qso["memCOMMENT"] = "US-2068";
+            qso["edtSTATE"] = "NY";
+            qso["cbxLocationStateProvince"] = "NY";
+            qso["edtCNTY"] = "Monroe";
+            var plan = Plan(qso, Kl4rl());
+            var labels = plan.Changes.Select(c => c.Label).ToList();
+            var changes = Changes(plan);
+
+            Assert.Equal("United States", changes["Country"]);
+            Assert.False(changes.ContainsKey("State"));   // the box above already says NY
+            Assert.Equal("NY", changes["State (Location tab)"]);
+            Assert.Equal("Monroe", changes["US County"]);
+            Assert.True(labels.IndexOf("State (Location tab)") < labels.IndexOf("US County"));
+        }
 
         [Fact]
         public void PotaQso_ParkOutsideUsAndCanada_ClearsTheHomeState()

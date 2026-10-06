@@ -250,10 +250,30 @@ namespace CallsignLookup.Services.Hrd
                 if (record.IsUnitedStates || record.IsCanadian) state = record.State;
                 if (record.IsUnitedStates) county = record.County.Length > 0 ? record.County : lookup.County?.County ?? "";
             }
+            // The Location tab's state picker is what HRD fills its county
+            // list from; the State box above doesn't set it. A new Country
+            // empties the picker, and a new state empties the county, so
+            // then they're set again whatever they showed before (tested
+            // 2026-10-06: KL4RL at US-2068, Alaska -> United States).
+            bool countryChanging = plan.Changes.Any(c => c.Label == "Country");
             if (state.Length > 0)
-                Change("State", "", "edtSTATE", "edtSTATE", HrdSetBy.Text, state.ToUpperInvariant());
-            if (county.Length > 0)
+            {
+                state = state.ToUpperInvariant();
+                Change("State", "", "edtSTATE", "edtSTATE", HrdSetBy.Text, state);
+                bool pickerChanging = countryChanging || !SameEntry(Get("cbxLocationStateProvince"), state);
+                if (pickerChanging)
+                    plan.Changes.Add(new HrdFieldChange("State (Location tab)", "Location", "cbxLocationStateProvince",
+                        "cbxLocationStateProvince", HrdSetBy.DropDown, Get("cbxLocationStateProvince"), state, state));
+                if (county.Length > 0 && pickerChanging)
+                    plan.Changes.Add(new HrdFieldChange("US County", "Location", "edtCNTY", "cbxLocationCounty",
+                        HrdSetBy.DropDown, Get("edtCNTY"), county, county));
+                else if (county.Length > 0)
+                    Change("US County", "Location", "edtCNTY", "cbxLocationCounty", HrdSetBy.DropDown, county, county);
+            }
+            else if (county.Length > 0)
+            {
                 Change("US County", "Location", "edtCNTY", "cbxLocationCounty", HrdSetBy.DropDown, county, county);
+            }
 
             if (located.Latitude is double lat && located.Longitude is double lon)
             {

@@ -22,11 +22,39 @@ namespace CallsignLookup.Services
     // location rather than trusted from QRZ's own (user-entered) fields.
     public sealed class CallsignLookupService(QrzService qrz)
     {
+        // A portable call (KL4RL/W2, VE3/KL4RL, K5JSG/P) is looked up as it
+        // is first, as it may have a QRZ page of its own. If not, QRZ
+        // doesn't fall back to the home call by itself - for KL4RL/W2 it
+        // says "Not found: W2" (tested 2026-10-06) - so the home call is
+        // looked up next.
         public async Task<LookupResult> LookupAsync(string callsign, CancellationToken cancellationToken = default)
         {
-            var record = await qrz.LookupAsync(callsign.Trim().ToUpperInvariant(), cancellationToken);
+            string call = callsign.Trim().ToUpperInvariant();
+            string home = HomeCall(call);
+            if (home == call) return Resolve(await qrz.LookupAsync(call, cancellationToken));
+
+            QrzCallsignRecord? record = null;
+            try
+            {
+                record = await qrz.LookupAsync(call, cancellationToken);
+            }
+            catch (QrzException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            {
+            }
+            // A page for some other part of the call ("W2") isn't this station.
+            if (record == null || !(record.Call.Equals(call, StringComparison.OrdinalIgnoreCase) ||
+                                    record.Call.Equals(home, StringComparison.OrdinalIgnoreCase)))
+                record = await qrz.LookupAsync(home, cancellationToken);
             return Resolve(record);
         }
+
+        // The home call in a portable one: the longest part (KL4RL in
+        // KL4RL/W2 or VE3/KL4RL, K5JSG in K5JSG/P). The call itself if it
+        // has no "/".
+        public static string HomeCall(string call) =>
+            call.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .OrderByDescending(part => part.Length)
+                .FirstOrDefault() ?? call;
 
         // Everything after the QRZ call - public so it's testable offline.
         public static LookupResult Resolve(QrzCallsignRecord record)

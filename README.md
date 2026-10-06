@@ -26,7 +26,7 @@ If you log with [Ham Radio Deluxe](https://www.hamradiodeluxe.com/) Logbook, Cal
 2. Do HRD's own Lookup as usual.
 3. Pick where you're operating from under **Working from**. These are HRD's My Station profiles (Tools > Configure > My Station). The choice is remembered.
 4. Click **Fill HRD QSO**, and leave HRD alone until the report appears. In order, it:
-   - checks name, QTH, state and US county against QRZ (for a POTA QSO the state and county are the park's instead), and fills any that are blank or don't match (a name with HRD's quoted nickname, `WILLIAM "Bill" HAMALAINEN`, matches). A portable call's home record counts as a match (KL4RL for KL4RL/VE9);
+   - checks name, QTH, state and US county against QRZ (for a POTA QSO the state and county are the park's instead), and fills any that are blank or don't match (a name with HRD's quoted nickname, `WILLIAM "Bill" HAMALAINEN`, matches). A portable call (KL4RL/W2, VE3/KL4RL) is looked up as it is first; if QRZ has no page for it, the home call (the longest part, KL4RL) is looked up instead, and that counts as a match;
    - takes POTA park references out of the Comment (`US-3033`, `POTA: US-4579 & US-4566`) and puts them in the POTA field in place of whatever was there, with the park's name and location from HRD's own park list. Several parks go in as a comma list, like HRD's "Multiple POTAs"; the first park is the one entered, so the POTA tab and the QSO get its name and location. This only happens when the Comment holds nothing but park references: a Comment with any other text is a real comment, so it's left alone and the report says so;
    - for a POTA QSO, sets the Country to the park's DXCC entity (from HRD's park list), so a station working portable from another country (KL4RL/VE9, an Alaska call in a New Brunswick park) gets the park's country, state/province, zones and section rather than its QRZ home ones. The QTH stays the QRZ home one. A park outside the US and Canada clears the state; a leftover US county or ARRL section is flagged in the report. HRD's country names (it calls 230 "Fed. Republic of Germany") come from `Data/hrdCountries.json`; for an entity not in it, the report asks you to check the Country by hand;
    - re-selects the My Station profile;
@@ -34,7 +34,7 @@ If you log with [Ham Radio Deluxe](https://www.hamradiodeluxe.com/) Logbook, Cal
    - clears the distance and presses HRD's Recalc (HRD measures grid square centre to grid square centre, from your My Station locator);
    - clears QSL Manager/VIA;
    - sets the IOTA reference and island if the location is on one.
-5. The report lists every field that had a different value (to verify), every blank field it filled in, the My Station fields the profile changed, notes, and anything HRD wouldn't take. Then:
+5. The report opens in front of the main window (even with Stay on top ticked), half an inch above it. It lists every field that had a different value (to verify), every blank field it filled in, the My Station fields the profile changed, notes, and anything HRD wouldn't take. Then:
    - **Approve - Update in HRD** presses Update (F7) in HRD's window, saving the QSO;
    - **Close** leaves the QSO open in HRD, unsaved, to finish there. Cancel in HRD throws the changes away.
 
