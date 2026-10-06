@@ -10,7 +10,7 @@ A Windows desktop tool that looks up an amateur radio callsign on [QRZ.com](http
 - **ARRL/RAC section**
 - **IOTA reference and island**, e.g. `AF-004 - Canary Islands` / `Alegranza`, or `EU-005 - Great Britain` / `Great Britain` for anywhere in England, Scotland or Wales
 
-Each result is in its own read-only box: copy one with Ctrl+C or right-click → Copy, or all of them with **Copy All**. **Clear** empties the window.
+Each result is in its own read-only box: copy one with Ctrl+C or right-click → Copy, or all of them with **Copy All**. **Clear** empties the window. Tick **Stay on top** to keep the window above other programs (HRD Logbook, for instance); the choice is remembered.
 
 The **Grid Square** box is the exception: if the grid on the QRZ record is wrong, paste or type the right one there, and every field is worked out again from the centre of that grid. Everything else, such as the DXCC entity and state, still comes from the QRZ record. A 6-character grid takes effect as soon as it's complete; press Enter for a 4-character one. Use 6 characters for islands, because the centre of a 4-character square is often out at sea.
 

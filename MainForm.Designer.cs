@@ -61,6 +61,7 @@ namespace CallsignLookup
             bottomPanel = new FlowLayoutPanel();
             btnCopy = new Button();
             btnClear = new Button();
+            chkStayOnTop = new CheckBox();
             statusStrip = new StatusStrip();
             lblStatus = new ToolStripStatusLabel();
             topPanel.SuspendLayout();
@@ -412,6 +413,7 @@ namespace CallsignLookup
             bottomPanel.AutoSize = true;
             bottomPanel.Controls.Add(btnCopy);
             bottomPanel.Controls.Add(btnClear);
+            bottomPanel.Controls.Add(chkStayOnTop);
             bottomPanel.Dock = DockStyle.Bottom;
             bottomPanel.FlowDirection = FlowDirection.RightToLeft;
             bottomPanel.Location = new Point(0, 357);
@@ -442,6 +444,17 @@ namespace CallsignLookup
             btnClear.Text = "C&lear";
             btnClear.UseVisualStyleBackColor = true;
             btnClear.Click += BtnClear_Click;
+            //
+            // chkStayOnTop
+            //
+            chkStayOnTop.Anchor = AnchorStyles.Left;
+            chkStayOnTop.AutoSize = true;
+            chkStayOnTop.Margin = new Padding(3, 3, 12, 3);
+            chkStayOnTop.Name = "chkStayOnTop";
+            chkStayOnTop.TabIndex = 2;
+            chkStayOnTop.Text = "Stay on &top";
+            chkStayOnTop.UseVisualStyleBackColor = true;
+            chkStayOnTop.CheckedChanged += ChkStayOnTop_CheckedChanged;
             //
             // statusStrip
             //
@@ -524,6 +537,7 @@ namespace CallsignLookup
         private FlowLayoutPanel bottomPanel;
         private Button btnCopy;
         private Button btnClear;
+        private CheckBox chkStayOnTop;
         private StatusStrip statusStrip;
         private ToolStripStatusLabel lblStatus;
     }

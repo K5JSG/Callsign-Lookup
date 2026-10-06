@@ -34,6 +34,7 @@ namespace CallsignLookup
                 ? $"QRZ login: {_settings.QrzUsername}"
                 : "Click \"QRZ Login...\" to enter your QRZ.com username and password.");
 
+            chkStayOnTop.Checked = TopMost = _settings.StayOnTop;
             LoadStationProfiles();
             _hrdTimer.Tick += HrdTimer_Tick;
             _hrdTimer.Start();
@@ -250,6 +251,15 @@ namespace CallsignLookup
             ClearResults();
             UpdateStatus("Cleared.");
             txtCallsign.Focus();
+        }
+
+        // Keeps the window above HRD (and everything else) while logging.
+        private void ChkStayOnTop_CheckedChanged(object? sender, EventArgs e)
+        {
+            TopMost = chkStayOnTop.Checked;
+            if (_settings.StayOnTop == TopMost) return;
+            _settings.StayOnTop = TopMost;
+            _settings.Save();
         }
 
         private void BtnCopy_Click(object? sender, EventArgs e)
