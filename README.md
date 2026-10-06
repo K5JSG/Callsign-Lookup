@@ -26,8 +26,9 @@ If you log with [Ham Radio Deluxe](https://www.hamradiodeluxe.com/) Logbook, Cal
 2. Do HRD's own Lookup as usual.
 3. Pick where you're operating from under **Working from**. These are HRD's My Station profiles (Tools > Configure > My Station). The choice is remembered.
 4. Click **Fill HRD QSO**, and leave HRD alone until the report appears. In order, it:
-   - checks name, QTH, state and US county against QRZ (for a POTA QSO the state and county are the park's instead), and fills any that are blank or don't match (a name with HRD's quoted nickname, `WILLIAM "Bill" HAMALAINEN`, matches);
+   - checks name, QTH, state and US county against QRZ (for a POTA QSO the state and county are the park's instead), and fills any that are blank or don't match (a name with HRD's quoted nickname, `WILLIAM "Bill" HAMALAINEN`, matches). A portable call's home record counts as a match (KL4RL for KL4RL/VE9);
    - takes POTA park references out of the Comment (`US-3033`, `POTA: US-4579 & US-4566`) and puts them in the POTA field in place of whatever was there, with the park's name and location from HRD's own park list. Several parks go in as a comma list, like HRD's "Multiple POTAs"; the first park is the one entered, so the POTA tab and the QSO get its name and location. This only happens when the Comment holds nothing but park references: a Comment with any other text is a real comment, so it's left alone and the report says so;
+   - for a POTA QSO, sets the Country to the park's DXCC entity (from HRD's park list), so a station working portable from another country (KL4RL/VE9, an Alaska call in a New Brunswick park) gets the park's country, state/province, zones and section rather than its QRZ home ones. The QTH stays the QRZ home one. A park outside the US and Canada clears the state; a leftover US county or ARRL section is flagged in the report. HRD's country names (it calls 230 "Fed. Republic of Germany") come from `Data/hrdCountries.json`; for an entity not in it, the report asks you to check the Country by hand;
    - re-selects the My Station profile;
    - sets the QSO's location to the park (or, for no park, the QRZ location), and from that the grid square, CQ and ITU zones and ARRL section, worked out as in the main window;
    - clears the distance and presses HRD's Recalc (HRD measures grid square centre to grid square centre, from your My Station locator);
@@ -87,6 +88,7 @@ This publishes a self-contained, single-file executable plus its `Data` folder t
 | `Services/Hrd/HrdQsoFiller.cs` | Works out what an HRD QSO needs and fills it in, in the order above |
 | `Services/Hrd/HrdEditWindow.cs` | Reads and fills HRD Logbook's log entry window through UI Automation |
 | `Services/Hrd/HrdPotaParks.cs`, `HrdStationProfiles.cs` | HRD's POTA park list and My Station profiles |
+| `Services/Hrd/HrdCountries.cs` | HRD's name for each DXCC entity, for its Country box |
 | `AppLogo.cs`, `logo.ico`, `logo-256.png` | Program icon and window logo, built into the exe (`Logo.png` is the full-size source artwork) |
 | `Services/QrzService.cs` | QRZ XML client: login, session key reuse, re-login on timeout |
 | `Services/CallsignLookupService.cs` | Callsign → location → grid/county/zones/section |
@@ -101,6 +103,7 @@ This publishes a self-contained, single-file executable plus its `Data` folder t
 | `Tests/CallsignLookup.Tests` | xUnit tests (reference locations, QRZ response parsing, HRD fill planning) |
 | `Installer/InnoSetup/` | Inno Setup installer script (built by `build.ps1`) |
 | `Tools/build_ontario_divisions.py` | Regenerates `Data/ontarioDivisions.json` (instructions inside) |
+| `Tools/build_hrd_countries.py` | Regenerates `Data/hrdCountries.json` from an HRD log (HRD keeps its country list inside its program file) |
 | `Tools/build_iota_islands.py` | Regenerates `Data/iotaIslands.json` from OpenStreetMap: a full build, or `--update` for just the groups IOTA has changed (instructions inside) |
 
 ## License

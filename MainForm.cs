@@ -384,7 +384,7 @@ namespace CallsignLookup
             txtCallsign.Text = call;
             if (!await LookupAsync(call) || _lastResult is not LookupResult lookup) return;
 
-            if (!lookup.Qrz.Call.Equals(call, StringComparison.OrdinalIgnoreCase) &&
+            if (!HrdQsoFiller.SameStation(call, lookup.Qrz.Call) &&
                 MessageBox.Show(this,
                     $"QRZ's page for {call} is the record for {lookup.Qrz.Call}.\n\n" +
                     "That's normal for a portable or changed callsign, but it can also mean it's the wrong station. " +

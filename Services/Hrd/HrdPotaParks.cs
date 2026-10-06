@@ -4,8 +4,25 @@ using System.Text.RegularExpressions;
 
 namespace CallsignLookup.Services.Hrd
 {
-    // LocationDesc is POTA's "US-TX" style location.
-    public sealed record PotaPark(string Reference, string Name, string LocationDesc, double Latitude, double Longitude, string Grid);
+    // LocationDesc is POTA's "US-TX" style location; Dxcc is the DXCC entity
+    // the park is in (the list's entityId: 291 United States, 1 Canada).
+    public sealed record PotaPark(string Reference, string Name, string LocationDesc, double Latitude, double Longitude, string Grid,
+        int? Dxcc = null)
+    {
+        // The state or province for a US or Canadian park ("US-TX" -> "TX",
+        // "CA-NB" -> "NB"; the first of several), otherwise "".
+        public string State
+        {
+            get
+            {
+                string first = LocationDesc.Split(',')[0].Trim();
+                return first.Length > 3 && (first.StartsWith("US-", StringComparison.OrdinalIgnoreCase) ||
+                                            first.StartsWith("CA-", StringComparison.OrdinalIgnoreCase))
+                    ? first[3..].ToUpperInvariant()
+                    : "";
+            }
+        }
+    }
 
     // The POTA park list HRD Logbook downloads every day for its POTA "..."
     // picker (%AppData%\HRDLLC\HRDCommon\all_parks_ext.csv, ~95,000 parks).
@@ -54,7 +71,8 @@ namespace CallsignLookup.Services.Hrd
             if (!double.TryParse(f[5], NumberStyles.Float, CultureInfo.InvariantCulture, out double lat) ||
                 !double.TryParse(f[6], NumberStyles.Float, CultureInfo.InvariantCulture, out double lon))
                 return null;
-            return new PotaPark(f[0].Trim(), f[1].Trim(), f[4].Trim(), lat, lon, f[7].Trim());
+            int? dxcc = int.TryParse(f[3], NumberStyles.None, CultureInfo.InvariantCulture, out int entity) ? entity : null;
+            return new PotaPark(f[0].Trim(), f[1].Trim(), f[4].Trim(), lat, lon, f[7].Trim(), dxcc);
         }
 
         private static List<string> SplitCsv(string line)

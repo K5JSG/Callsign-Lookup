@@ -7,7 +7,7 @@ namespace CallsignLookup.Services
     // The fields this app uses from a QRZ XML callsign record. Every field is
     // optional on QRZ's side (and several - lat/lon among them - are only sent
     // to XML Logbook Data subscribers), so all of them may be blank.
-    public sealed class QrzCallsignRecord
+    public sealed record QrzCallsignRecord
     {
         public string Call { get; init; } = "";
         public string FirstName { get; init; } = "";
@@ -64,6 +64,16 @@ namespace CallsignLookup.Services
         // Only used when QRZ sends no DXCC number: the DXCC entity name, or
         // failing that the QSL mailing address's country.
         private string EntityName => Land.Length > 0 ? Land : Country;
+
+        // The same station somewhere else - a park it's working from, maybe
+        // in another state or DXCC entity (KL4RL/VE9 from a park in New
+        // Brunswick). Its home county, state and IOTA don't come along; the
+        // DXCC entity changes only when the park gives one.
+        public QrzCallsignRecord At(int? dxcc, string state)
+        {
+            if (dxcc == null || dxcc == Dxcc) return this with { State = state, County = "" };
+            return this with { Dxcc = dxcc, Land = "", Country = "", State = state, County = "", Iota = "" };
+        }
 
         public bool IsUnitedStates => Dxcc is int dxcc
             ? UsCountyEntities.ContainsKey(dxcc)

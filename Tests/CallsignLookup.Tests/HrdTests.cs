@@ -47,7 +47,8 @@ namespace CallsignLookup.Tests
         public void ParseLine_ReadsHrdParkList()
         {
             var park = HrdPotaParks.ParseLine("\"US-3033\",\"Lockhart State Park\",\"1\",\"291\",\"US-TX\",\"29.8494\",\"-97.6969\",\"EL19du\"");
-            Assert.Equal(new PotaPark("US-3033", "Lockhart State Park", "US-TX", 29.8494, -97.6969, "EL19du"), park);
+            Assert.Equal(new PotaPark("US-3033", "Lockhart State Park", "US-TX", 29.8494, -97.6969, "EL19du", 291), park);
+            Assert.Equal("TX", park?.State);
         }
 
         [Fact]
@@ -80,6 +81,8 @@ namespace CallsignLookup.Tests
         {
             "US-3033" => Lockhart,
             "US-4566" => new PotaPark("US-4566", "Second Park", "US-TX", 30.0, -97.0, "EM10ia"),
+            "CA-0792" => new PotaPark("CA-0792", "Parlee Beach Provincial Park", "CA-NB", 46.2395, -64.5101, "FN76rf", 1),
+            "DL-0001" => new PotaPark("DL-0001", "Jasmund National Park", "DL", 54.5434, 13.6211, "JO64ln", 230),
             _ => null,
         };
 
@@ -87,6 +90,7 @@ namespace CallsignLookup.Tests
         private static Dictionary<string, string> W5erxQso() => new()
         {
             ["edtCALL"] = "W5ERX",
+            ["cbxCOUNTRY"] = "United States",
             ["edtNAME"] = "Wade T Bolling",
             ["edtQTH"] = "Kyle",
             ["edtSTATE"] = "TX",
@@ -152,6 +156,96 @@ namespace CallsignLookup.Tests
             }, Changes(plan));
             Assert.Empty(plan.Warnings);
             Assert.Equal("Home - K5JSG", plan.Profile?.DisplayName);
+        }
+
+        // KL4RL/VE9: an Alaska call hunted at a New Brunswick park. HRD's
+        // QRZ lookup filled in her Anchorage home.
+        private static Dictionary<string, string> Kl4rlQso() => new()
+        {
+            ["edtCALL"] = "KL4RL/VE9",
+            ["cbxCOUNTRY"] = "Alaska",
+            ["edtNAME"] = "Jacquelyn C \"Cozette\" Green",
+            ["edtQTH"] = "Anchorage",
+            ["edtSTATE"] = "AK",
+            ["edtCNTY"] = "Anchorage",
+            ["memCOMMENT"] = "CA-0792",
+            ["edtLAT"] = "61.1919",
+            ["edtLON"] = "-149.8873",
+            ["edtGRIDSQUARE"] = "BP51dd",
+            ["edtCQZ"] = "1",
+            ["edtITUZ"] = "1",
+            ["cbxARRLSECT"] = "AK",
+            ["edtIOTARefNo"] = "-none-",
+        };
+
+        private static QrzCallsignRecord Kl4rl() => new()
+        {
+            Call = "KL4RL",
+            FirstName = "Jacquelyn C",
+            LastName = "Green",
+            Nickname = "Cozette",
+            City = "Anchorage",
+            State = "AK",
+            County = "Anchorage",
+            Dxcc = 6,
+            Land = "Alaska",
+            Latitude = 61.1919,
+            Longitude = -149.8873,
+        };
+
+        [Fact]
+        public void PotaQso_ParkInAnotherCountry_UsesTheParksCountryAndProvince()
+        {
+            var plan = Plan(Kl4rlQso(), Kl4rl());
+            var changes = Changes(plan);
+
+            Assert.Equal("CA-0792", changes["POTA Ref"]);
+            Assert.Equal("Canada", changes["Country"]);
+            Assert.Equal("NB", changes["State"]);
+            Assert.Equal("NB", changes["ARRL Section"]);
+            Assert.Equal("FN76rf", changes["Grid Square"]);
+            Assert.Equal("5", changes["CQ Zone"]);
+            Assert.Equal("9", changes["ITU Zone"]);
+            Assert.False(changes.ContainsKey("QTH"));        // the home QTH stays
+            Assert.False(changes.ContainsKey("US County"));  // no county in Canada
+            Assert.Contains(plan.Warnings, w => w.Contains("not at home in Alaska"));
+            Assert.DoesNotContain(plan.Warnings, w => w.Contains("check it's the same station"));
+            Assert.Contains(plan.Warnings, w => w.Contains("US county Anchorage"));
+        }
+
+        [Theory]
+        [InlineData("KL4RL/VE9", "KL4RL", true)]
+        [InlineData("VE9/KL4RL", "KL4RL", true)]
+        [InlineData("K5JSG/P", "K5JSG", true)]
+        [InlineData("W5ERX", "w5erx", true)]
+        [InlineData("KL4RL/VE9", "VE9ABC", false)]
+        [InlineData("N1ABC", "N1ABD", false)]
+        public void SameStation_HomeCallOfAPortableCall(string call, string qrzCall, bool same) =>
+            Assert.Equal(same, HrdQsoFiller.SameStation(call, qrzCall));
+
+        [Fact]
+        public void PotaQso_ParkOutsideUsAndCanada_ClearsTheHomeState()
+        {
+            var qso = Kl4rlQso();
+            qso["memCOMMENT"] = "DL-0001";
+            var changes = Changes(Plan(qso, Kl4rl()));
+
+            Assert.Equal("Fed. Republic of Germany", changes["Country"]);
+            Assert.Equal("", changes["State"]);
+            Assert.Equal("14", changes["CQ Zone"]);
+        }
+
+        [Fact]
+        public void PotaQso_CanadianAtAParkInAnotherProvince_GetsThatProvince()
+        {
+            var record = new QrzCallsignRecord { Call = "VE3TST", Dxcc = 1, State = "ON", City = "Ottawa", Latitude = 45.42, Longitude = -75.69 };
+            var qso = new Dictionary<string, string> { ["edtCALL"] = "VE3TST", ["edtSTATE"] = "ON", ["memCOMMENT"] = "CA-0792" };
+            var changes = Changes(Plan(qso, record));
+
+            Assert.Equal("NB", changes["State"]);
+            Assert.Equal("NB", changes["ARRL Section"]);
+            Assert.Equal("Ottawa", changes["QTH"]);
+            Assert.Equal("Canada", changes["Country"]);   // HRD had nothing in Country
         }
 
         [Fact]
@@ -297,8 +391,8 @@ namespace CallsignLookup.Tests
         public void QrzRecordForAnotherCall_IsWarned()
         {
             var qso = W5erxQso();
-            qso["edtCALL"] = "W5ERX/P";
-            Assert.Contains(Plan(qso, W5erx()).Warnings, w => w.Contains("not W5ERX/P"));
+            qso["edtCALL"] = "AA5ZZ";
+            Assert.Contains(Plan(qso, W5erx()).Warnings, w => w.Contains("not AA5ZZ"));
         }
 
         [Fact]

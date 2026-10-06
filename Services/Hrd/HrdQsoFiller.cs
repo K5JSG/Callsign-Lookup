@@ -95,7 +95,7 @@ namespace CallsignLookup.Services.Hrd
 
             var plan = new HrdFillPlan { Callsign = Get("edtCALL"), Profile = profile };
 
-            if (!plan.Callsign.Equals(record.Call, StringComparison.OrdinalIgnoreCase))
+            if (!SameStation(plan.Callsign, record.Call))
                 plan.Warnings.Add($"QRZ's record is for {record.Call}, not {plan.Callsign} - check it's the same station.");
 
             void Change(string label, string tab, string readId, string writeId, HrdSetBy how, string newValue, string typed = "")
@@ -111,7 +111,8 @@ namespace CallsignLookup.Services.Hrd
                 Change("Name", "", "edtNAME", "edtNAME", HrdSetBy.Text, record.NameWithNickname);
             if (record.City.Length > 0)
                 Change("QTH", "", "edtQTH", "edtQTH", HrdSetBy.Text, record.City);
-            // (State and county come after the park - for a POTA QSO they're the park's.)
+            // (Country, state and county come after the park - for a POTA QSO
+            // the park decides them.)
 
             // 2. POTA. A Comment holding nothing but park references is where
             // the user parks them: they replace whatever is in the POTA field
@@ -187,11 +188,35 @@ namespace CallsignLookup.Services.Hrd
                 }
             }
 
-            // 3. Location: the park's, or the QRZ record's.
+            // A park in another DXCC entity than the QRZ record's: the station
+            // is working portable (KL4RL/VE9 - an Alaska call in a New
+            // Brunswick park). The QTH stays the home one (the user's choice).
+            if (park?.Dxcc is int parkDxcc && record.Dxcc is int homeDxcc && parkDxcc != homeDxcc)
+            {
+                plan.Warnings.Add($"{record.Call} is at {park.Reference} in {park.LocationDesc}, not at home in " +
+                                  $"{(record.Land.Length > 0 ? record.Land : "DXCC " + homeDxcc)} - country, state, zones and " +
+                                  "section are the park's.");
+            }
+
+            // Country: the park's DXCC entity. HRD sets it from the callsign's
+            // prefix, which a station working portable may not show.
+            if (park?.Dxcc is int entity)
+            {
+                if (HrdCountries.Name(entity) is string country)
+                    Change("Country", "", "cbxCOUNTRY", "cbxCOUNTRY", HrdSetBy.DropDown, country, country);
+                else
+                    plan.Warnings.Add($"{park.Reference} is in DXCC entity {entity}, which isn't on this app's list of HRD's " +
+                                      $"country names - check HRD's Country is right (it shows \"{Get("cbxCOUNTRY")}\").");
+            }
+
+            // 3. Location: the park's, or the QRZ record's. At a park, the
+            // park's DXCC entity and state/province - not QRZ's home ones -
+            // decide the county, section and IOTA.
             LookupResult located = lookup;
             if (park != null)
             {
-                located = CallsignLookupService.ResolveAt(record, park.Latitude, park.Longitude, $"POTA park {park.Reference}");
+                located = CallsignLookupService.ResolveAt(record.At(park.Dxcc, park.State),
+                    park.Latitude, park.Longitude, $"POTA park {park.Reference}");
             }
             else if (lookup.Latitude == null)
             {
@@ -208,11 +233,17 @@ namespace CallsignLookup.Services.Hrd
             string state = "", county = "";
             if (park != null)
             {
-                state = located.County?.StateAbbrev
-                        ?? (park.LocationDesc.StartsWith("US-", StringComparison.OrdinalIgnoreCase) ||
-                            park.LocationDesc.StartsWith("CA-", StringComparison.OrdinalIgnoreCase)
-                            ? park.LocationDesc[3..] : "");
+                state = located.County?.StateAbbrev ?? park.State;
                 county = located.County?.County ?? "";
+
+                // A park outside the US and Canada has no state, county or
+                // section - HRD's lookup may have put the home ones in.
+                if (state.Length == 0 && Get("edtSTATE").Length > 0)
+                    Change("State", "", "edtSTATE", "edtSTATE", HrdSetBy.Text, "");
+                if (county.Length == 0 && Get("edtCNTY").Length > 0)
+                    plan.Warnings.Add($"HRD has US county {Get("edtCNTY")}, but {park.Reference} isn't in the US - clear it on the Location tab.");
+                if (located.ArrlSection == null && !HrdFieldChange.IsBlank(Get("cbxARRLSECT")))
+                    plan.Warnings.Add($"HRD has ARRL section {Get("cbxARRLSECT")}, but {park.Reference} isn't in one - clear it on the Location tab.");
             }
             else
             {
@@ -301,6 +332,11 @@ namespace CallsignLookup.Services.Hrd
         internal static bool SameCoordinate(string old, double value) =>
             double.TryParse(old, NumberStyles.Float, CultureInfo.InvariantCulture, out double o) &&
             Math.Abs(o - value) < 0.001;
+
+        // QRZ's record is for the callsign, or for the home call in a
+        // portable one (KL4RL for KL4RL/VE9, VE9/KL4RL or KL4RL/P).
+        public static bool SameStation(string call, string qrzCall) =>
+            call.Split('/').Any(part => part.Equals(qrzCall, StringComparison.OrdinalIgnoreCase));
 
         // Case and spacing don't count.
         internal static bool SameText(string a, string b) =>
