@@ -62,6 +62,7 @@ namespace CallsignLookup
             btnCopy = new Button();
             btnClear = new Button();
             chkStayOnTop = new CheckBox();
+            chkClearQslVia = new CheckBox();
             statusStrip = new StatusStrip();
             lblStatus = new ToolStripStatusLabel();
             topPanel.SuspendLayout();
@@ -414,6 +415,7 @@ namespace CallsignLookup
             bottomPanel.Controls.Add(btnCopy);
             bottomPanel.Controls.Add(btnClear);
             bottomPanel.Controls.Add(chkStayOnTop);
+            bottomPanel.Controls.Add(chkClearQslVia);
             bottomPanel.Dock = DockStyle.Bottom;
             bottomPanel.FlowDirection = FlowDirection.RightToLeft;
             bottomPanel.Location = new Point(0, 357);
@@ -455,6 +457,17 @@ namespace CallsignLookup
             chkStayOnTop.Text = "Stay on &top";
             chkStayOnTop.UseVisualStyleBackColor = true;
             chkStayOnTop.CheckedChanged += ChkStayOnTop_CheckedChanged;
+            //
+            // chkClearQslVia
+            //
+            chkClearQslVia.Anchor = AnchorStyles.Left;
+            chkClearQslVia.AutoSize = true;
+            chkClearQslVia.Margin = new Padding(3, 3, 12, 3);
+            chkClearQslVia.Name = "chkClearQslVia";
+            chkClearQslVia.TabIndex = 3;
+            chkClearQslVia.Text = "Clear QSL &via in HRD";
+            chkClearQslVia.UseVisualStyleBackColor = true;
+            chkClearQslVia.CheckedChanged += ChkClearQslVia_CheckedChanged;
             //
             // statusStrip
             //
@@ -538,6 +551,7 @@ namespace CallsignLookup
         private Button btnCopy;
         private Button btnClear;
         private CheckBox chkStayOnTop;
+        private CheckBox chkClearQslVia;
         private StatusStrip statusStrip;
         private ToolStripStatusLabel lblStatus;
     }

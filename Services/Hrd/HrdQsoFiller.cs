@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace CallsignLookup.Services.Hrd
 {
@@ -8,6 +9,7 @@ namespace CallsignLookup.Services.Hrd
         Text,           // a text box: set its value
         DropDown,       // open the list, type Typed, Enter
         TypeInList,     // type Typed into the (closed) list, Enter - the IOTA ref
+        Check,          // a check box: tick it ("Yes")
     }
 
     // One field to change. Tab is the HRD tab it's on ("" = the top half of
@@ -24,11 +26,18 @@ namespace CallsignLookup.Services.Hrd
         internal static bool IsBlank(string value) => value.Length == 0 || value == "-none-";
     }
 
+    // A field the fill can't set but that may hold a home value (the US county
+    // for a park in Canada). HRD empties some of these itself when the Country
+    // changes, so whether to warn is decided by reading the field again after
+    // the fill, not from what it held before.
+    public sealed record HrdLeftoverCheck(string ReadId, string Label, string Reason);
+
     public sealed class HrdFillPlan
     {
         public string Callsign { get; init; } = "";
         public List<HrdFieldChange> Changes { get; } = [];
         public List<string> Warnings { get; } = [];
+        public List<HrdLeftoverCheck> LeftoverChecks { get; } = [];
         public HrdStationProfile? Profile { get; init; }
     }
 
@@ -52,7 +61,8 @@ namespace CallsignLookup.Services.Hrd
     //      (with the park's name and location) and comes out of the Comment.
     //   3. The QSO's location is the park's, if there is one, otherwise the
     //      QRZ record's; grid square follows.
-    //   4. QSL Manager/VIA is cleared.
+    //   4. QSL Manager/VIA is cleared if "Clear QSL via" is on (a Silent Key
+    //      note is kept).
     //   5. My Station is re-picked (the profile the user is working from).
     //   6. IOTA ref and island, if the location is on one.
     //   7. CQ and ITU zones, and the ARRL section for US/Canada stations.
@@ -66,7 +76,10 @@ namespace CallsignLookup.Services.Hrd
         // Tabs read for the "before" picture, and in the order changes are
         // made: My Station before Location, because Recalc measures from the
         // My Station locator.
-        private static readonly string[] TabsToRead = ["Location", "POTA", "QSL", "My Station", "IOTA"];
+        private static readonly string[] TabsToRead = ["Location", "POTA", "QSL", "My Station", "IOTA", "Contact"];
+
+        // HRD's Silent Key check box, on the Contact tab; read as "Yes" / "No".
+        private const string SilentKeyBox = "chkSILENT_KEY";
 
         // ---- reading --------------------------------------------------------
 
@@ -79,6 +92,7 @@ namespace CallsignLookup.Services.Hrd
             {
                 window.SelectTab(tab);
                 foreach (var (id, value) in window.ReadAll()) values.TryAdd(id, value);
+                if (window.ReadChecked(SilentKeyBox) is bool silentKey) values[SilentKeyBox] = silentKey ? "Yes" : "No";
             }
             if (startTab.Length > 0) window.SelectTab(startTab);
             return values;
@@ -88,12 +102,22 @@ namespace CallsignLookup.Services.Hrd
 
         public static HrdFillPlan Plan(
             IReadOnlyDictionary<string, string> qso, LookupResult lookup,
-            Func<string, PotaPark?> findPark, HrdStationProfile? profile)
+            Func<string, PotaPark?> findPark, HrdStationProfile? profile, bool clearQslVia = true)
         {
             var record = lookup.Qrz;
             string Get(string id) => qso.TryGetValue(id, out string? v) ? v : "";
 
-            var plan = new HrdFillPlan { Callsign = Get("edtCALL"), Profile = profile };
+            // The selected My Station is only applied to a QSO that already has
+            // that station (a re-pick) or none - not over a different one,
+            // e.g. an old Penfield QSO opened while working from Home.
+            bool stationDiffers = profile != null && StationMatches(profile, Get) == false;
+            var plan = new HrdFillPlan { Callsign = Get("edtCALL"), Profile = stationDiffers ? null : profile };
+            if (stationDiffers)
+            {
+                string here = string.Join(" ", new[] { Get("edtMY_CITY"), Get("edtMY_GRIDSQUARE") }.Where(s => s.Length > 0));
+                plan.Warnings.Add($"This QSO's My Station ({(here.Length > 0 ? here : "another station")}) doesn't match the " +
+                                  $"selected \"{profile!.DisplayName}\" - My Station left as it is.");
+            }
 
             if (!SameStation(plan.Callsign, record.Call))
                 plan.Warnings.Add($"QRZ's record is for {record.Call}, not {plan.Callsign} - check it's the same station.");
@@ -114,11 +138,11 @@ namespace CallsignLookup.Services.Hrd
             // (Country, state and county come after the park - for a POTA QSO
             // the park decides them.)
 
-            // 2. POTA. A Comment holding nothing but park references is where
-            // the user parks them: they replace whatever is in the POTA field
-            // (as a comma list, like HRD's "Multiple POTAs" - the first is
-            // the park entered) and the Comment is cleared. A Comment with
-            // anything else in it is a real comment - left alone, parks and all.
+            // 2. POTA. Park references in the Comment are where the user parks
+            // them: they replace whatever is in the POTA field (as a comma
+            // list, like HRD's "Multiple POTAs" - the first is the park
+            // entered) and come out of the Comment, with the spaces around
+            // them. Any other comment text stays as it is.
             string comment = Get("memCOMMENT");
             var (commentRefs, commentRest, notParks) = HrdPotaParks.TakeReferences(comment, r => findPark(r) != null);
             var refs = Get("edtPOTA_REF")
@@ -131,15 +155,10 @@ namespace CallsignLookup.Services.Hrd
                 plan.Warnings.Add($"The Comment has {string.Join(", ", notParks)}, which looks like a park but isn't in HRD's " +
                                   "park list - Comment and POTA left as they are.");
             }
-            else if (commentRefs.Count > 0 && commentRest.Length > 0)
-            {
-                plan.Warnings.Add($"The Comment has other text as well as park {string.Join(", ", commentRefs)} " +
-                                  $"(\"{comment}\") - Comment and POTA left as they are. Move the parks by hand.");
-            }
             else if (commentRefs.Count > 0)
             {
                 refs = commentRefs;
-                Change("Comment", "", "memCOMMENT", "memCOMMENT", HrdSetBy.Text, "");
+                Change("Comment", "", "memCOMMENT", "memCOMMENT", HrdSetBy.Text, commentRest);
             }
 
             PotaPark? park = null;
@@ -241,9 +260,9 @@ namespace CallsignLookup.Services.Hrd
                 if (state.Length == 0 && Get("edtSTATE").Length > 0)
                     Change("State", "", "edtSTATE", "edtSTATE", HrdSetBy.Text, "");
                 if (county.Length == 0 && Get("edtCNTY").Length > 0)
-                    plan.Warnings.Add($"HRD has US county {Get("edtCNTY")}, but {park.Reference} isn't in the US - clear it on the Location tab.");
+                    plan.LeftoverChecks.Add(new HrdLeftoverCheck("edtCNTY", "US county", $"{park.Reference} isn't in the US"));
                 if (located.ArrlSection == null && !HrdFieldChange.IsBlank(Get("cbxARRLSECT")))
-                    plan.Warnings.Add($"HRD has ARRL section {Get("cbxARRLSECT")}, but {park.Reference} isn't in one - clear it on the Location tab.");
+                    plan.LeftoverChecks.Add(new HrdLeftoverCheck("cbxARRLSECT", "ARRL section", $"{park.Reference} isn't in one"));
             }
             else
             {
@@ -298,12 +317,43 @@ namespace CallsignLookup.Services.Hrd
                 PlanIota(plan, located.Iota, Get("edtIOTARefNo"), lat, lon, Change);
             }
 
-            // 4. QSL Manager/VIA.
-            if (Get("edtQSL_VIA").Length > 0)
+            // 4. QSL Manager/VIA - unless "Clear QSL via" is off, and never a
+            // Silent Key note, which the user has cleared only on their say-so.
+            string via = Get("edtQSL_VIA");
+            if (SilentKeyNoteFor(record.Call) is string skNote)
+            {
+                // QRZ's record is "CALL/SK2023": a Silent Key. Note it in QSL
+                // via ("SK 2023", ahead of any other note that stays) and tick
+                // the Silent Key box - whatever the clear option says.
+                string newVia = IsSilentKeyNote(via) ? via
+                    : via.Length == 0 || clearQslVia ? skNote
+                    : $"{skNote} - {via}";
+                Change("QSL Manager/VIA", "QSL", "edtQSL_VIA", "edtQSL_VIA", HrdSetBy.Text, newVia);
+                if (Get(SilentKeyBox) != "Yes")
+                    plan.Changes.Add(new HrdFieldChange("Silent Key", "Contact", SilentKeyBox, SilentKeyBox, HrdSetBy.Check, "", "Yes", "Yes"));
+            }
+            else if (clearQslVia && IsSilentKeyNote(via))
+                plan.Warnings.Add($"QSL Manager/VIA is \"{via}\", a Silent Key note - left as it is.");
+            else if (clearQslVia && via.Length > 0)
                 Change("QSL Manager/VIA", "QSL", "edtQSL_VIA", "edtQSL_VIA", HrdSetBy.Text, "");
 
             return plan;
         }
+
+        // "SK 2023" from QRZ's "WB2FAU/SK2023" ("SK" alone from "/SK"); null
+        // for a callsign that isn't a Silent Key's.
+        internal static string? SilentKeyNoteFor(string qrzCall)
+        {
+            var match = Regex.Match(qrzCall, @"/SK(?<rest>[^/]*)$", RegexOptions.IgnoreCase);
+            if (!match.Success) return null;
+            string rest = match.Groups["rest"].Value.Trim(' ', '-', '_', '.');
+            return rest.Length == 0 ? "SK" : $"SK {rest}";
+        }
+
+        // "SK March 28, 2025", "SK", "SK2023", "SK-2023", "Silent Key" - but
+        // not a word that merely starts with it (SKCC, SKED).
+        internal static bool IsSilentKeyNote(string text) =>
+            Regex.IsMatch(text, @"\bSK(?![A-Za-z])|\bsilent\s+key\b", RegexOptions.IgnoreCase);
 
         private delegate void ChangeFn(string label, string tab, string readId, string writeId, HrdSetBy how, string newValue, string typed = "");
 
@@ -354,9 +404,32 @@ namespace CallsignLookup.Services.Hrd
             Math.Abs(o - value) < 0.001;
 
         // QRZ's record is for the callsign, or for the home call in a
-        // portable one (KL4RL for KL4RL/VE9, VE9/KL4RL or KL4RL/P).
-        public static bool SameStation(string call, string qrzCall) =>
-            call.Split('/').Any(part => part.Equals(qrzCall, StringComparison.OrdinalIgnoreCase));
+        // portable one (KL4RL for KL4RL/VE9, VE9/KL4RL or KL4RL/P). QRZ's
+        // record for a Silent Key is "WB2FAU/SK2023" (or /SK with some other
+        // ending) - still that station.
+        public static bool SameStation(string call, string qrzCall)
+        {
+            qrzCall = Regex.Replace(qrzCall, @"/SK[^/]*$", "", RegexOptions.IgnoreCase);
+            return call.Split('/').Any(part => part.Equals(qrzCall, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Whether the QSO's My Station is the profile: same callsign, locator
+        // and position (within about 100 m). Null when that can't be told -
+        // the profile has no position, or the QSO has no My Station yet.
+        internal static bool? StationMatches(HrdStationProfile profile, Func<string, string> get)
+        {
+            if (profile.Locator.Length == 0 || profile.Latitude is not double pLat || profile.Longitude is not double pLon)
+                return null;
+            string grid = get("edtMY_GRIDSQUARE");
+            if (!double.TryParse(get("edtMY_LAT"), NumberStyles.Float, CultureInfo.InvariantCulture, out double lat) ||
+                !double.TryParse(get("edtMY_LON"), NumberStyles.Float, CultureInfo.InvariantCulture, out double lon))
+                return null;
+
+            string call = get("edtSTATION_CALLSIGN");
+            return grid.Equals(profile.Locator, StringComparison.OrdinalIgnoreCase) &&
+                   Math.Abs(lat - pLat) < 0.001 && Math.Abs(lon - pLon) < 0.001 &&
+                   (call.Length == 0 || call.Equals(profile.Callsign, StringComparison.OrdinalIgnoreCase));
+        }
 
         // Case and spacing don't count.
         internal static bool SameText(string a, string b) =>
@@ -405,8 +478,18 @@ namespace CallsignLookup.Services.Hrd
             report.DistanceNew = window.Read("edtDISTANCE") ?? "";
             if (report.DistanceNew.Length == 0) report.Problems.Add("HRD's Recalc didn't fill in the distance - press Recalc on the Location tab.");
 
+            // Home values HRD didn't empty itself (it clears the county when
+            // the Country changes) are still there for the user to clear.
+            foreach (var check in plan.LeftoverChecks)
+            {
+                string now = window.Read(check.ReadId) ?? "";
+                if (!HrdFieldChange.IsBlank(now))
+                    plan.Warnings.Add($"HRD has {check.Label} {now}, but {check.Reason} - clear it on the Location tab.");
+            }
+
             ApplyTab(window, plan, report, "QSL");
             ApplyTab(window, plan, report, "IOTA");
+            ApplyTab(window, plan, report, "Contact");
 
             // Back where the user can see the location and map.
             window.SelectTab("Location");
@@ -434,8 +517,13 @@ namespace CallsignLookup.Services.Hrd
                         case HrdSetBy.TypeInList:
                             window.ChooseInDropDown(change.WriteId, change.Typed, openFirst: false);
                             break;
+                        case HrdSetBy.Check:
+                            window.SetChecked(change.WriteId, true);
+                            break;
                     }
-                    string actual = window.Read(change.ReadId) ?? "";
+                    string actual = change.How == HrdSetBy.Check
+                        ? window.ReadChecked(change.ReadId) == true ? "Yes" : "No"
+                        : window.Read(change.ReadId) ?? "";
                     bool took = change.How == HrdSetBy.Text
                         ? SameText(actual, change.New) || SameNumber(actual, change.New)
                         : SameEntry(actual, change.Typed);

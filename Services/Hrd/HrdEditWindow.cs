@@ -126,6 +126,37 @@ namespace CallsignLookup.Services.Hrd
             }
         }
 
+        // A check box: null when it isn't on the tab that's showing.
+        public bool? ReadChecked(string id)
+        {
+            if (Control(id) is not AutomationElement e) return null;
+            try
+            {
+                return e.TryGetCurrentPattern(TogglePattern.Pattern, out object p)
+                    ? ((TogglePattern)p).Current.ToggleState == ToggleState.On
+                    : null;
+            }
+            catch (ElementNotAvailableException)
+            {
+                Refresh();
+                return null;
+            }
+        }
+
+        // Ticks or unticks a check box (only if it isn't already so); returns
+        // how it's left.
+        public bool? SetChecked(string id, bool on)
+        {
+            var e = Control(id) ?? throw new HrdException($"Can't find HRD's {id} box.");
+            var toggle = (TogglePattern)e.GetCurrentPattern(TogglePattern.Pattern);
+            if ((toggle.Current.ToggleState == ToggleState.On) != on)
+            {
+                toggle.Toggle();
+                Thread.Sleep(250);
+            }
+            return ReadChecked(id);
+        }
+
         // A field in the top half of the window (always showing), found
         // straight from its full id - much quicker than Read's look through
         // every control, for checking every second which QSO is open.

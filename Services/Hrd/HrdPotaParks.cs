@@ -111,10 +111,27 @@ namespace CallsignLookup.Services.Hrd
             if (refs.Count == 0 || unknown.Count > 0) return ([], comment, unknown);
 
             // The whole list - "POTA: US-4579 & US-4566 & US-4576" - comes out
-            // as one piece, so its "&" / "," / "and" go with it.
-            string rest = ReferenceList().Replace(comment, " ");
-            rest = Regex.Replace(rest, @"\s{2,}", " ").Trim().Trim(',', ';', '-', ' ');
+            // as one piece, so its "&" / "," / "and" go with it. Whatever else
+            // is in the comment stays exactly as written.
+            string rest = comment;
+            Match list;
+            while ((list = ReferenceList().Match(rest)).Success)
+                rest = CutOut(rest, list);
             return (refs, rest, []);
+        }
+
+        // Takes the matched list out, with the spaces around it and the
+        // separator joining it to the rest ("note, POTA: US-1234" /
+        // "US-1234 - note"). Text on both sides is joined with one space.
+        private static string CutOut(string text, Match list)
+        {
+            string before = text[..list.Index];
+            string after = text[(list.Index + list.Length)..];
+            if (before.Trim().Length == 0)
+                return Regex.Replace(after.TrimStart(), @"^[,;:\-–]+\s*", "");
+            if (after.Trim().Length == 0)
+                return Regex.Replace(before.TrimEnd(), @"\s*[,;:\-–]+$", "");
+            return before.TrimEnd() + " " + after.TrimStart();
         }
 
         // POTA references: a 1-4 character program prefix and a 4-5 digit park

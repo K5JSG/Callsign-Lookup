@@ -14,6 +14,9 @@ namespace CallsignLookup.Tests
         [InlineData("POTA: US-10236, US-7442 & US-7335", "US-10236,US-7442,US-7335", "")]
         [InlineData("Nice signal POTA: US-1611 & US-6544 73", "US-1611,US-6544", "Nice signal 73")]
         [InlineData("pota: ca-4214", "CA-4214", "")]
+        [InlineData("Nice  signal,  POTA: US-1611", "US-1611", "Nice  signal")]
+        [InlineData("US-1611, great  op", "US-1611", "great  op")]
+        [InlineData("a US-1611 b US-2222 c", "US-1611,US-2222", "a b c")]
         public void TakeReferences_FromComment(string comment, string refs, string rest)
         {
             var (found, remaining, unknown) = HrdPotaParks.TakeReferences(comment, AnyPark);
@@ -114,9 +117,9 @@ namespace CallsignLookup.Tests
             ["edtIOTAIsland"] = "",
         };
 
-        private static QrzCallsignRecord W5erx() => new()
+        private static QrzCallsignRecord W5erx(string call = "W5ERX") => new()
         {
-            Call = "W5ERX",
+            Call = call,
             FirstName = "Wade T",
             LastName = "Bolling",
             City = "Kyle",
@@ -212,7 +215,10 @@ namespace CallsignLookup.Tests
             Assert.False(changes.ContainsKey("US County"));  // no county in Canada
             Assert.Contains(plan.Warnings, w => w.Contains("not at home in Alaska"));
             Assert.DoesNotContain(plan.Warnings, w => w.Contains("check it's the same station"));
-            Assert.Contains(plan.Warnings, w => w.Contains("US county Anchorage"));
+            // HRD empties the county itself when the Country changes, so the
+            // warning is decided after the fill, by reading the field again.
+            Assert.DoesNotContain(plan.Warnings, w => w.Contains("US county"));
+            Assert.Contains(plan.LeftoverChecks, c => c.ReadId == "edtCNTY" && c.Label == "US county");
         }
 
         [Theory]
@@ -340,6 +346,35 @@ namespace CallsignLookup.Tests
             Assert.Equal("", changes["QSL Manager/VIA"]);
         }
 
+        [Theory]
+        [InlineData("SK March 28, 2025")]
+        [InlineData("sk")]
+        [InlineData("Silent Key 2024")]
+        [InlineData("SK2023")]
+        [InlineData("SK-2023 - Field Day No QSL CARDS")]
+        public void SilentKeyNoteInQslVia_IsKept(string via)
+        {
+            var qso = W5erxQso();
+            qso["edtQSL_VIA"] = via;
+            var plan = Plan(qso, W5erx());
+
+            Assert.False(Changes(plan).ContainsKey("QSL Manager/VIA"));
+            Assert.Contains(plan.Warnings, w => w.Contains("Silent Key note"));
+        }
+
+        [Theory]
+        [InlineData("NOQSOCC")]
+        [InlineData("ASK W5ERX")]   // "ASK" is not "SK"
+        [InlineData("SKCC")]        // a word that only starts with it
+        [InlineData("BURO")]
+        public void OtherQslVia_IsCleared(string via)
+        {
+            var qso = W5erxQso();
+            qso["edtQSL_VIA"] = via;
+
+            Assert.Equal("", Changes(Plan(qso, W5erx()))["QSL Manager/VIA"]);
+        }
+
         [Fact]
         public void MultiplePark_CommaListAndFirstParksLocation()
         {
@@ -372,9 +407,10 @@ namespace CallsignLookup.Tests
         }
 
         [Theory]
-        [InlineData("Nice signal POTA: US-3033 73")]
-        [InlineData("US-3033 - worked him again from home later")]
-        public void CommentWithOtherText_IsLeftAlone(string comment)
+        [InlineData("Nice signal POTA: US-3033 73", "Nice signal 73")]
+        [InlineData("US-3033 - worked him again from home later", "worked him again from home later")]
+        [InlineData("  Hi  there,  POTA: US-3033  ", "  Hi  there")]
+        public void CommentWithOtherText_KeepsTheOtherText_AndTheParkMovesToPota(string comment, string kept)
         {
             var qso = W5erxQso();
             qso["edtPOTA_REF"] = "US-4566";
@@ -382,10 +418,127 @@ namespace CallsignLookup.Tests
             var plan = Plan(qso, W5erx());
             var changes = Changes(plan);
 
-            Assert.False(changes.ContainsKey("Comment"));
-            Assert.False(changes.ContainsKey("POTA Ref"));             // the POTA field's own park stands
-            Assert.Equal("Second Park", changes["Park Name"]);
-            Assert.Contains(plan.Warnings, w => w.Contains("other text"));
+            Assert.Equal(kept, changes["Comment"]);
+            Assert.Equal("US-3033", changes["POTA Ref"]);
+            Assert.Equal("Lockhart State Park", changes["Park Name"]);
+            Assert.DoesNotContain(plan.Warnings, w => w.Contains("other text"));
+        }
+
+        private static readonly HrdStationProfile HomeProfile =
+            new("Home", "K5JSG", "FN13ah", 43.315450, -77.937824);
+
+        private static HrdFillPlan PlanWithStation(string grid, string lat, string lon, string call = "K5JSG")
+        {
+            var qso = W5erxQso();
+            qso["edtMY_GRIDSQUARE"] = grid;
+            qso["edtMY_LAT"] = lat;
+            qso["edtMY_LON"] = lon;
+            qso["edtMY_CITY"] = "Penfield";
+            qso["edtSTATION_CALLSIGN"] = call;
+            return HrdQsoFiller.Plan(qso, CallsignLookupService.Resolve(W5erx()), FindPark, HomeProfile);
+        }
+
+        [Fact]
+        public void MyStation_SameAsSelected_IsRePicked()
+        {
+            var plan = PlanWithStation("FN13ah", "43.31545", "-77.937824");
+
+            Assert.Equal(HomeProfile, plan.Profile);
+            Assert.DoesNotContain(plan.Warnings, w => w.Contains("My Station"));
+        }
+
+        [Theory]
+        [InlineData("FN13gd", "43.133482", "-77.44069", "K5JSG")]   // Penfield
+        [InlineData("FN13ah", "43.302941", "-77.921021", "K5JSG")]  // Contesting - same grid, other spot
+        [InlineData("FN13ah", "43.31545", "-77.937824", "K5JSG/P")] // right place, other callsign
+        public void MyStation_DifferentFromSelected_IsLeftAloneWithAWarning(string grid, string lat, string lon, string call)
+        {
+            var plan = PlanWithStation(grid, lat, lon, call);
+
+            Assert.Null(plan.Profile);
+            Assert.Contains(plan.Warnings, w => w.Contains("doesn't match") && w.Contains("Home - K5JSG"));
+        }
+
+        [Fact]
+        public void MyStation_NotThereYet_OrProfileHasNoPosition_IsApplied()
+        {
+            var qso = W5erxQso();
+            var blank = HrdQsoFiller.Plan(qso, CallsignLookupService.Resolve(W5erx()), FindPark, HomeProfile);
+            Assert.Equal(HomeProfile, blank.Profile);
+
+            qso["edtMY_GRIDSQUARE"] = "FN13gd"; qso["edtMY_LAT"] = "43.133482"; qso["edtMY_LON"] = "-77.44069";
+            var noPosition = HrdQsoFiller.Plan(qso, CallsignLookupService.Resolve(W5erx()), FindPark,
+                new HrdStationProfile("Home", "K5JSG/P"));
+            Assert.NotNull(noPosition.Profile);
+        }
+
+        [Theory]
+        [InlineData("WB2FAU", "WB2FAU/SK2023", true)]
+        [InlineData("WB2FAU", "WB2FAU/SK", true)]
+        [InlineData("WB2FAU", "WB2FAU/SK-2023", true)]
+        [InlineData("WB2FAU", "WB2FAU/SKJAN2023", true)]
+        [InlineData("WB2FAU/P", "WB2FAU/sk2023", true)]
+        [InlineData("WB2FAU", "W1AW/SK2023", false)]
+        [InlineData("KL4RL/VE9", "KL4RL", true)]
+        public void SameStation_IgnoresASilentKeySuffix(string call, string qrz, bool same) =>
+            Assert.Equal(same, HrdQsoFiller.SameStation(call, qrz));
+
+        [Theory]
+        [InlineData("WB2FAU/SK2023", "SK 2023")]
+        [InlineData("W5ERX/SK", "SK")]
+        [InlineData("W5ERX/sk-2023", "SK 2023")]
+        [InlineData("W5ERX/SKJAN2023", "SK JAN2023")]
+        [InlineData("W5ERX", null)]
+        [InlineData("W5ERX/P", null)]
+        public void SilentKeyNoteFor_QrzCall(string qrzCall, string? note) =>
+            Assert.Equal(note, HrdQsoFiller.SilentKeyNoteFor(qrzCall));
+
+        private static HrdFillPlan PlanSilentKey(string via, bool clearQslVia = true, string box = "No")
+        {
+            var qso = W5erxQso();
+            qso["edtQSL_VIA"] = via;
+            qso["chkSILENT_KEY"] = box;
+            return HrdQsoFiller.Plan(qso, CallsignLookupService.Resolve(W5erx("W5ERX/SK2023")), FindPark,
+                new HrdStationProfile("Home", "K5JSG"), clearQslVia);
+        }
+
+        [Fact]
+        public void SilentKey_NotesQslVia_AndTicksTheBox()
+        {
+            var plan = PlanSilentKey("");
+            var changes = Changes(plan);
+
+            Assert.Equal("SK 2023", changes["QSL Manager/VIA"]);
+            Assert.Equal("Yes", changes["Silent Key"]);
+            Assert.Equal(HrdSetBy.Check, plan.Changes.Single(c => c.Label == "Silent Key").How);
+            Assert.DoesNotContain(plan.Warnings, w => w.Contains("same station"));
+        }
+
+        [Theory]
+        [InlineData("BURO", true, "SK 2023")]               // the old via is cleared, as usual
+        [InlineData("BURO", false, "SK 2023 - BURO")]       // the option says leave it - it stays
+        public void SilentKey_WithAnotherNoteInQslVia(string via, bool clear, string expected) =>
+            Assert.Equal(expected, Changes(PlanSilentKey(via, clear))["QSL Manager/VIA"]);
+
+        [Fact]
+        public void SilentKey_AlreadyNotedAndTicked_ChangesNothing()
+        {
+            var changes = Changes(PlanSilentKey("SK 2020 - Field Day No QSL CARDS", box: "Yes"));
+
+            Assert.False(changes.ContainsKey("QSL Manager/VIA"));
+            Assert.False(changes.ContainsKey("Silent Key"));
+        }
+
+        [Fact]
+        public void QslViaOption_Off_LeavesTheFieldAlone()
+        {
+            var qso = W5erxQso();
+            qso["edtQSL_VIA"] = "NOQSOCC";
+            var plan = HrdQsoFiller.Plan(qso, CallsignLookupService.Resolve(W5erx()), FindPark,
+                new HrdStationProfile("Home", "K5JSG"), clearQslVia: false);
+
+            Assert.False(Changes(plan).ContainsKey("QSL Manager/VIA"));
+            Assert.DoesNotContain(plan.Warnings, w => w.Contains("QSL"));
         }
 
         [Fact]

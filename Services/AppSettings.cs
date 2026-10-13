@@ -17,6 +17,9 @@ namespace CallsignLookup.Services
         // "Stay on top": the main window stays above other windows (HRD).
         public bool StayOnTop { get; set; }
 
+        // Fill HRD QSO clears the QSL Manager/VIA box; off leaves it alone.
+        public bool ClearQslVia { get; set; } = true;
+
         private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
         public static string Folder

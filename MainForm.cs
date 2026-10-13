@@ -36,6 +36,7 @@ namespace CallsignLookup
                 : "Click \"QRZ Login...\" to enter your QRZ.com username and password.");
 
             chkStayOnTop.Checked = TopMost = _settings.StayOnTop;
+            chkClearQslVia.Checked = _settings.ClearQslVia;
             LoadStationProfiles();
             _hrdTimer.Tick += HrdTimer_Tick;
             _hrdTimer.Start();
@@ -89,7 +90,12 @@ namespace CallsignLookup
 
         private bool PromptForQrzLogin()
         {
-            using var dialog = new QrzLoginForm(_settings.QrzUsername, _settings.GetQrzPassword());
+            // With "Stay on top" on, this window is topmost and a normal dialog
+            // opens behind it - unreachable, and this window is disabled.
+            using var dialog = new QrzLoginForm(_settings.QrzUsername, _settings.GetQrzPassword())
+            {
+                TopMost = TopMost
+            };
             if (dialog.ShowDialog(this) != DialogResult.OK) return false;
 
             _settings.QrzUsername = dialog.Username;
@@ -263,6 +269,14 @@ namespace CallsignLookup
             _settings.Save();
         }
 
+        // Whether Fill HRD QSO empties the QSL Manager/VIA box or leaves it alone.
+        private void ChkClearQslVia_CheckedChanged(object? sender, EventArgs e)
+        {
+            if (_settings.ClearQslVia == chkClearQslVia.Checked) return;
+            _settings.ClearQslVia = chkClearQslVia.Checked;
+            _settings.Save();
+        }
+
         private void BtnCopy_Click(object? sender, EventArgs e)
         {
             var sb = new StringBuilder();
@@ -394,6 +408,7 @@ namespace CallsignLookup
                 return;
 
             var profile = cbxStationProfile.SelectedItem as HrdStationProfile;
+            bool clearQslVia = chkClearQslVia.Checked;
             _hrdFilling = true;
             SetBusy(true);
             UpdateStatus($"Filling in {call} in HRD - leave HRD alone until it's done...");
@@ -402,7 +417,7 @@ namespace CallsignLookup
                 var report = await Task.Run(() =>
                 {
                     var qso = HrdQsoFiller.ReadQso(window);
-                    var plan = HrdQsoFiller.Plan(qso, lookup, HrdPotaParks.Find, profile);
+                    var plan = HrdQsoFiller.Plan(qso, lookup, HrdPotaParks.Find, profile, clearQslVia);
                     return HrdQsoFiller.Apply(window, plan);
                 });
                 int changed = report.Applied.Count(a => a.Took);
