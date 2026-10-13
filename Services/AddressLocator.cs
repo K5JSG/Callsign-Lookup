@@ -99,7 +99,8 @@ namespace CallsignLookup.Services
         // with its county cleared (QRZ's was worked out from the same bad ZIP)
         // and the address's state - county, section and zones follow the place.
         public static async Task<LookupResult?> LocateAsync(
-            ParsedAddress address, LookupResult lookup, IGeocoder geocoder, CancellationToken cancellationToken = default)
+            ParsedAddress address, LookupResult lookup, IGeocoder geocoder, CancellationToken cancellationToken = default,
+            string reason = "QRZ has no location for this station")
         {
             if (address.IsEmpty) return null;
             var record = lookup.Qrz;
@@ -140,7 +141,7 @@ namespace CallsignLookup.Services
                 if (match == null || how == null) return null;
 
                 string state = address.State.Length > 0 ? address.State : record.State;
-                string source = $"{how} (approximate - QRZ has no location for this station" +
+                string source = $"{how} (approximate - {reason}" +
                                 (address.Note.Length > 0 ? "; " + address.Note.TrimEnd('.') : "") + ")";
                 return CallsignLookupService.ResolveAt(record.At(record.Dxcc, state), match.Latitude, match.Longitude, source);
             }
@@ -157,6 +158,29 @@ namespace CallsignLookup.Services
         // "US Post Office - Evergreen, 4001, South Pine Street" from Nominatim's long name.
         private static string ShortName(GeocodeMatch match) =>
             string.Join(", ", match.DisplayName.Split(", ", StringSplitOptions.RemoveEmptyEntries).Take(3));
+
+        // QRZ's own location is in another state than the one QRZ lists for the
+        // station (W7F: lat/long in Maricopa County, AZ; the record says Tacoma,
+        // WA). One of the two is wrong for this QSO, so the user is told and can
+        // choose. US stations only.
+        public static bool LocationDisagreesWithState(LookupResult lookup) =>
+            lookup.QrzHadLocation && lookup.Qrz.IsUnitedStates && lookup.Qrz.State.Length > 0 &&
+            lookup.County?.StateAbbrev is string state && !state.Equals(lookup.Qrz.State, StringComparison.OrdinalIgnoreCase);
+
+        // For a station whose QRZ location disagrees with its state: the location
+        // the address gives instead, to offer as the other choice. Null if they
+        // don't disagree or the address finds nothing.
+        public static async Task<LookupResult?> FindAlternativeAsync(
+            LookupResult lookup, string hrdAddress, IGeocoder? geocoder, CancellationToken cancellationToken = default)
+        {
+            if (geocoder == null || !LocationDisagreesWithState(lookup)) return null;
+            return await LocateAsync(Parse(hrdAddress, lookup.Qrz), lookup, geocoder, cancellationToken,
+                "chosen over QRZ's own location, which is in another state");
+        }
+
+        // "DM33up - Maricopa County, AZ" - one line to tell two locations apart.
+        public static string Describe(LookupResult location) =>
+            $"{location.GridSquare} - {(location.County != null ? location.County.County + " County, " + location.County.StateAbbrev : location.Qrz.State)}";
 
         // For a lookup whose QRZ record had no usable location: try the HRD
         // address (empty string = use QRZ's own city, state and ZIP). Anything

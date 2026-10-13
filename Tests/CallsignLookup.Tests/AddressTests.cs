@@ -157,6 +157,73 @@ namespace CallsignLookup.Tests
             Assert.Contains(plan.Warnings, w => w.Contains("Location is approximate") && w.Contains("middle of Tacoma, WA"));
         }
 
+        // W7F: QRZ's lat/long is in Maricopa County, AZ; the record says Tacoma, WA.
+        private static QrzCallsignRecord W7f() => new()
+        {
+            Call = "W7F", City = "Tacoma", State = "WA", Zip = "98411", Country = "United States", Dxcc = 291,
+            Latitude = 33.645, Longitude = -112.293333,
+        };
+
+        [Fact]
+        public void LocationDisagreesWithState_WhenQrzPutsTheStationInAnotherState()
+        {
+            Assert.True(AddressLocator.LocationDisagreesWithState(CallsignLookupService.Resolve(W7f())));
+
+            // Consistent: WA coordinates, WA record.
+            var consistent = CallsignLookupService.Resolve(new QrzCallsignRecord
+                { Call = "W7X", State = "WA", Latitude = 47.25, Longitude = -122.44, Dxcc = 291 });
+            Assert.False(AddressLocator.LocationDisagreesWithState(consistent));
+
+            // No QRZ location at all (W7I): that's the other case, not a disagreement.
+            Assert.False(AddressLocator.LocationDisagreesWithState(CallsignLookupService.Resolve(W7i())));
+        }
+
+        [Fact]
+        public async Task FindAlternative_GivesTheAddressesLocation_OnlyWhenTheyDisagree()
+        {
+            var geocoder = new FakeGeocoder(_ => TacomaCentre);
+            var w7f = CallsignLookupService.Resolve(W7f());
+
+            var other = await AddressLocator.FindAlternativeAsync(w7f, "Club\nPO Box 11188\nTacoma, WA 98411", geocoder);
+
+            Assert.Equal(47.2531, other!.Latitude);
+            Assert.Equal("Pierce", other.County?.County);
+            Assert.Contains("chosen over QRZ's own location", other.LocationSource);
+            Assert.NotEqual(w7f.GridSquare, other.GridSquare);
+
+            var consistent = CallsignLookupService.Resolve(new QrzCallsignRecord
+                { Call = "W7X", State = "WA", Latitude = 47.25, Longitude = -122.44, Dxcc = 291 });
+            Assert.Null(await AddressLocator.FindAlternativeAsync(consistent, "Tacoma, WA", geocoder));
+            Assert.Null(await AddressLocator.FindAlternativeAsync(w7f, "Tacoma, WA", null));
+        }
+
+        [Fact]
+        public void FillWarnsWhenQrzsLocationIsInAnotherState()
+        {
+            var qso = new Dictionary<string, string> { ["edtCALL"] = "W7F" };
+            var plan = CallsignLookup.Services.Hrd.HrdQsoFiller.Plan(qso, CallsignLookupService.Resolve(W7f()), _ => null, null);
+
+            Assert.Contains(plan.Warnings, w => w.Contains("in another state") && w.Contains("WA") && w.Contains("Maricopa"));
+        }
+
+        [Fact]
+        public void BatchItem_ActiveChanges_FollowTheChoice()
+        {
+            var qrz = new CallsignLookup.Services.Hrd.HrdRowChanges();
+            qrz.Changes.Add(new CallsignLookup.Services.Hrd.HrdColumnChange("Grid", "COL_GRIDSQUARE", "x", "DM33up"));
+            var address = new CallsignLookup.Services.Hrd.HrdRowChanges();
+            address.Changes.Add(new CallsignLookup.Services.Hrd.HrdColumnChange("Grid", "COL_GRIDSQUARE", "x", "CN87sf"));
+            var item = new CallsignLookup.Services.Hrd.HrdBatchItem { Pk = 1, Call = "W7F", Changes = qrz, AlternativeChanges = address };
+
+            Assert.Same(qrz, item.Active);
+            item.UseAlternative = true;
+            Assert.Same(address, item.Active);
+
+            // With no alternative the choice has no effect.
+            var plain = new CallsignLookup.Services.Hrd.HrdBatchItem { Pk = 2, Changes = qrz, UseAlternative = true };
+            Assert.Same(qrz, plain.Active);
+        }
+
         [Fact]
         public async Task UseAddress_LeavesAResultAloneThatQrzHadALocationFor()
         {

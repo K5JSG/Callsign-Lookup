@@ -475,13 +475,34 @@ namespace CallsignLookup
             UpdateStatus($"Filling in {call} in HRD - leave HRD alone until it's done...");
             try
             {
-                var report = await Task.Run(async () =>
+                var read = await Task.Run(async () =>
                 {
                     var qso = HrdQsoFiller.ReadQso(window);
+                    string address = qso.GetValueOrDefault("memoADDRESS", "");
                     // A station QRZ has no location for: the address in HRD's Address
                     // box (which the user can correct) locates it instead.
-                    var located = await AddressLocator.UseAddressAsync(lookup, qso.GetValueOrDefault("memoADDRESS", ""), _geocoder);
-                    var plan = HrdQsoFiller.Plan(qso, located, HrdPotaParks.Find, profile, clearQslVia);
+                    var located = await AddressLocator.UseAddressAsync(lookup, address, _geocoder);
+                    // QRZ's location is in another state than its record: the address
+                    // gives the other choice.
+                    var other = await AddressLocator.FindAlternativeAsync(located, address, _geocoder);
+                    return (qso, located, other);
+                });
+
+                var chosen = read.located;
+                if (read.other != null)
+                {
+                    bool? useAddress = ChooseLocation(call, read.located, read.other);
+                    if (useAddress == null)
+                    {
+                        UpdateStatus("Cancelled - nothing was changed in HRD.");
+                        return;
+                    }
+                    if (useAddress == true) chosen = read.other;
+                }
+
+                var report = await Task.Run(() =>
+                {
+                    var plan = HrdQsoFiller.Plan(read.qso, chosen, HrdPotaParks.Find, profile, clearQslVia);
                     return HrdQsoFiller.Apply(window, plan);
                 });
                 int changed = report.Applied.Count(a => a.Took);
@@ -514,6 +535,28 @@ namespace CallsignLookup
         }
 
         private void UpdateStatus(string text) => lblStatus.Text = text;
+
+        // QRZ's location is in another state than its record says (W7F: Maricopa
+        // County, AZ, for a Tacoma, WA station): asks which to use. True for the
+        // address's, false for QRZ's, null to cancel.
+        private bool? ChooseLocation(string call, LookupResult qrz, LookupResult address)
+        {
+            var useQrz = new TaskDialogCommandLinkButton("Use QRZ's location", AddressLocator.Describe(qrz));
+            var useAddress = new TaskDialogCommandLinkButton("Use the address's location",
+                $"{AddressLocator.Describe(address)}{Environment.NewLine}{address.LocationSource}");
+            var page = new TaskDialogPage
+            {
+                Caption = "Which location?",
+                Heading = $"{call}: QRZ's location and its address disagree",
+                Text = $"QRZ puts {call} in {qrz.County?.StateAbbrev}, but its record lists {qrz.Qrz.State}. " +
+                       "Special-event stations often have a club address that isn't where they operate. Which should be filled in?",
+                Icon = TaskDialogIcon.Warning,
+                AllowCancel = true,
+                Buttons = { useQrz, useAddress, TaskDialogButton.Cancel },
+            };
+            var result = TaskDialog.ShowDialog(this, page);
+            return result == useQrz ? false : result == useAddress ? true : null;
+        }
 
         // The report goes in front of this window, even with "Stay on top"
         // on, and half an inch higher than it, so its title bar is clear

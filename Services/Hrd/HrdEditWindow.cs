@@ -88,11 +88,16 @@ namespace CallsignLookup.Services.Hrd
             }
             if (cancel == null) return false;
 
+            int before = FindAll().Count;
             ((InvokePattern)cancel.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+            // Closed when one fewer window is found. Not "this element can't be
+            // read any more": HRD's Qt accessibility leaves a closed window
+            // readable for a while (tested 2026-10-12 - the window had gone but
+            // IsOpen stayed true for the whole wait).
             for (int i = 0; i < 10; i++)
             {
                 Thread.Sleep(300);
-                if (!IsOpen) return true;
+                if (!IsOpen || FindAll().Count < before) return true;
             }
             return false;
         }

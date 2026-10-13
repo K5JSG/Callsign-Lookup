@@ -15,12 +15,22 @@ namespace CallsignLookup.Services.Hrd
         public string? Skipped { get; init; }
         public HrdRowChanges? Changes { get; init; }
 
+        // The changes with the location the address gives, when QRZ's location
+        // disagrees with its own state (W7F) - the user picks. Null otherwise.
+        public HrdRowChanges? AlternativeChanges { get; init; }
+        public string QrzLocationText { get; init; } = "";
+        public string AlternativeLocationText { get; init; } = "";
+        public bool UseAlternative { get; set; }
+
+        // What would be written.
+        public HrdRowChanges? Active => UseAlternative && AlternativeChanges != null ? AlternativeChanges : Changes;
+
         // Ticked in the preview to start with: it has changes and QRZ's record
         // is for this callsign. One whose QRZ record is for another callsign
         // needs the user to look first (as in the single fill's prompt).
         public bool TickedAtStart { get; init; }
 
-        public bool Applicable => Skipped == null && Changes is { Any: true };
+        public bool Applicable => Skipped == null && Active is { Any: true };
     }
 
     public sealed class HrdBatchResult
@@ -118,9 +128,22 @@ namespace CallsignLookup.Services.Hrd
                 result = await AddressLocator.UseAddressAsync(result, Text(row, "COL_ADDRESS"), geocoder, cancellationToken);
                 var plan = HrdQsoFiller.Plan(HrdRowMapper.ToQsoFields(row), result, HrdPotaParks.Find, profile, clearQslVia);
                 var changes = HrdRowMapper.ToColumnUpdates(plan, row, Continent);
+
+                // QRZ's location is in another state than its record: also work out the
+                // address's location, for the user to choose between.
+                HrdRowChanges? alternative = null;
+                var other = await AddressLocator.FindAlternativeAsync(result, Text(row, "COL_ADDRESS"), geocoder, cancellationToken);
+                if (other != null)
+                {
+                    var otherPlan = HrdQsoFiller.Plan(HrdRowMapper.ToQsoFields(row), other, HrdPotaParks.Find, profile, clearQslVia);
+                    alternative = HrdRowMapper.ToColumnUpdates(otherPlan, row, Continent);
+                }
                 items.Add(new HrdBatchItem
                 {
                     Pk = pk, Call = call, When = when, Changes = changes,
+                    AlternativeChanges = alternative,
+                    QrzLocationText = AddressLocator.Describe(result),
+                    AlternativeLocationText = other != null ? AddressLocator.Describe(other) : "",
                     TickedAtStart = changes.Any && HrdQsoFiller.SameStation(call, result.Qrz.Call),
                 });
             }
@@ -141,7 +164,7 @@ namespace CallsignLookup.Services.Hrd
             {
                 if (!current.TryGetValue(item.Pk, out var row))
                     result.NotApplied.Add((item, "no longer in the log"));
-                else if (item.Changes!.Changes.Any(c => !HrdRowMapper.SameValue(row.GetValueOrDefault(c.Column), c.Old, 1e-6)))
+                else if (item.Active!.Changes.Any(c => !HrdRowMapper.SameValue(row.GetValueOrDefault(c.Column), c.Old, 1e-6)))
                     result.NotApplied.Add((item, "changed in HRD since the preview"));
                 else
                     toWrite.Add(item);
@@ -149,12 +172,12 @@ namespace CallsignLookup.Services.Hrd
             if (toWrite.Count == 0) return result;
 
             result.BackupPath = log.Backup();
-            log.Apply(toWrite.Select(i => new HrdRowUpdate(i.Pk, i.Changes!.Columns)));
+            log.Apply(toWrite.Select(i => new HrdRowUpdate(i.Pk, i.Active!.Columns)));
 
             var after = log.ReadRows(toWrite.Select(i => i.Pk));
             foreach (var item in toWrite)
             {
-                var wrong = item.Changes!.Changes.FirstOrDefault(c =>
+                var wrong = item.Active!.Changes.FirstOrDefault(c =>
                     !after.TryGetValue(item.Pk, out var row) || !HrdRowMapper.SameValue(row.GetValueOrDefault(c.Column), c.New, 1e-6));
                 if (wrong != null) result.Failed.Add((item, $"{wrong.Label} didn't read back as written"));
                 else result.Applied.Add(item);
@@ -176,7 +199,7 @@ namespace CallsignLookup.Services.Hrd
             {
                 if (!current.TryGetValue(item.Pk, out var row))
                     result.NotApplied.Add((item, "no longer in the log"));
-                else if (item.Changes!.Changes.Any(c => !HrdRowMapper.SameValue(row.GetValueOrDefault(c.Column), c.New, 1e-6)))
+                else if (item.Active!.Changes.Any(c => !HrdRowMapper.SameValue(row.GetValueOrDefault(c.Column), c.New, 1e-6)))
                     result.NotApplied.Add((item, "changed since the batch wrote it"));
                 else
                     toRevert.Add(Reverse(item));
@@ -184,12 +207,12 @@ namespace CallsignLookup.Services.Hrd
             if (toRevert.Count == 0) return result;
 
             result.BackupPath = log.Backup();
-            log.Apply(toRevert.Select(i => new HrdRowUpdate(i.Pk, i.Changes!.Columns)));
+            log.Apply(toRevert.Select(i => new HrdRowUpdate(i.Pk, i.Active!.Columns)));
 
             var after = log.ReadRows(toRevert.Select(i => i.Pk));
             foreach (var item in toRevert)
             {
-                var wrong = item.Changes!.Changes.FirstOrDefault(c =>
+                var wrong = item.Active!.Changes.FirstOrDefault(c =>
                     !after.TryGetValue(item.Pk, out var row) || !HrdRowMapper.SameValue(row.GetValueOrDefault(c.Column), c.New, 1e-6));
                 if (wrong != null) result.Failed.Add((item, $"{wrong.Label} didn't read back as it was"));
                 else result.Applied.Add(item);
@@ -201,7 +224,7 @@ namespace CallsignLookup.Services.Hrd
         private static HrdBatchItem Reverse(HrdBatchItem item)
         {
             var reversed = new HrdRowChanges();
-            foreach (var c in item.Changes!.Changes) reversed.Changes.Add(new HrdColumnChange(c.Label, c.Column, c.New, c.Old));
+            foreach (var c in item.Active!.Changes) reversed.Changes.Add(new HrdColumnChange(c.Label, c.Column, c.New, c.Old));
             return new HrdBatchItem { Pk = item.Pk, Call = item.Call, When = item.When, Changes = reversed };
         }
 
@@ -217,7 +240,7 @@ namespace CallsignLookup.Services.Hrd
             foreach (var item in result.Applied)
             {
                 text.AppendLine($"  {item.Call} {item.When}");
-                foreach (var change in item.Changes!.Changes)
+                foreach (var change in item.Active!.Changes)
                     text.AppendLine($"      {change.Label}: {Show(change.Old)} -> {Show(change.New)}");
             }
 

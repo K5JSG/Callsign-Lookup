@@ -30,6 +30,12 @@ namespace CallsignLookup
         private readonly Button _copy = new();
         private readonly Button _openBackup = new();
         private readonly Button _undo = new();
+        private readonly Button _allAddress = new();
+        private readonly Button _allQrz = new();
+        private readonly Panel _choicePanel = new();
+        private readonly CheckBox _choiceQrz = new();
+        private readonly CheckBox _choiceAddress = new();
+        private bool _settingChoice;
 
         private List<HrdBatchItem> _items = [];
         private HrdBatchResult? _result;
@@ -69,7 +75,8 @@ namespace CallsignLookup
             _qsos.Columns.Add("QSO", 110);
             _qsos.Columns.Add("Date / time (UTC)", 130);
             _qsos.Columns.Add("Changes", 70);
-            _qsos.Columns.Add("Notes", 560);
+            _qsos.Columns.Add("Location", 70);
+            _qsos.Columns.Add("Notes", 490);
             _qsos.ItemCheck += Qsos_ItemCheck;
             _qsos.ItemChecked += (_, _) => UpdateApplyButton();
             _qsos.SelectedIndexChanged += (_, _) => ShowDetails();
@@ -97,6 +104,7 @@ namespace CallsignLookup
             lower.Controls.Add(_summary);
             lower.Controls.Add(_details);
             lower.Controls.Add(_notes);
+            lower.Controls.Add(_choicePanel);
 
             var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 250 };
             split.Panel1.Controls.Add(_qsos);
@@ -133,6 +141,34 @@ namespace CallsignLookup
             _undo.Click += async (_, _) => await UndoAsync();
             new ToolTip().SetToolTip(_undo, "Puts the QSOs back to what they were before this batch (a backup is made first).");
 
+            // For every QSO whose QRZ location disagrees with its state: the same choice for all.
+            _allAddress.AutoSize = true;
+            _allAddress.Text = "Address location for &all";
+            _allAddress.Visible = false;
+            _allAddress.Click += (_, _) => SetAllLocations(useAddress: true);
+            _allQrz.AutoSize = true;
+            _allQrz.Text = "QRZ location for a&ll";
+            _allQrz.Visible = false;
+            _allQrz.Click += (_, _) => SetAllLocations(useAddress: false);
+            new ToolTip().SetToolTip(_allAddress, "For every QSO where QRZ's location is in another state than its record lists, use the location the address gives.");
+            new ToolTip().SetToolTip(_allQrz, "For every QSO where QRZ's location is in another state than its record lists, use QRZ's location.");
+
+            // QRZ's location disagrees with its own state: two ticks, one of them always on.
+            _choicePanel.Dock = DockStyle.Bottom;
+            _choicePanel.Height = 52;
+            _choicePanel.Visible = false;
+            foreach (var box in new[] { _choiceQrz, _choiceAddress })
+            {
+                box.AutoSize = true;
+                box.Left = 8;
+            }
+            _choiceQrz.Top = 4;
+            _choiceAddress.Top = 27;
+            _choicePanel.Controls.Add(_choiceQrz);
+            _choicePanel.Controls.Add(_choiceAddress);
+            _choiceQrz.CheckedChanged += (_, _) => ChoiceChanged(useAddress: false);
+            _choiceAddress.CheckedChanged += (_, _) => ChoiceChanged(useAddress: true);
+
             var buttons = new FlowLayoutPanel
             {
                 Dock = DockStyle.Bottom,
@@ -145,6 +181,8 @@ namespace CallsignLookup
             buttons.Controls.Add(_undo);
             buttons.Controls.Add(_openBackup);
             buttons.Controls.Add(_copy);
+            buttons.Controls.Add(_allQrz);
+            buttons.Controls.Add(_allAddress);
             buttons.Controls.Add(_untickAll);
             buttons.Controls.Add(_tickAll);
             CancelButton = _close;
@@ -198,11 +236,15 @@ namespace CallsignLookup
                     _close.Text = "Cancel";
                     break;
                 case Stage.Applying:
+                    _allAddress.Visible = _allQrz.Visible = false;
+                    _choicePanel.Enabled = false;
                     _intro.Text = "Writing to HRD's log...";
                     _apply.Enabled = false;
                     _close.Enabled = false;
                     break;
                 case Stage.Done:
+                    _allAddress.Visible = _allQrz.Visible = false;
+                    _choicePanel.Visible = false;
                     _progress.Visible = false;
                     _close.Enabled = true;
                     _close.Text = "Close";
@@ -240,13 +282,8 @@ namespace CallsignLookup
             _qsos.BeginUpdate();
             foreach (var item in _items)
             {
-                string notes = item.Skipped != null ? "skipped: " + item.Skipped
-                    : !item.Changes!.Any ? "nothing to change"
-                    : item.Changes.Warnings.Count > 0 ? item.Changes.Warnings[0] + (item.Changes.Warnings.Count > 1 ? $" (+{item.Changes.Warnings.Count - 1} more)" : "")
-                    : "";
                 var row = new ListViewItem([
-                    item.Call.Length > 0 ? item.Call : $"#{item.Pk}", item.When,
-                    item.Skipped != null ? "-" : item.Changes!.Changes.Count.ToString(), notes])
+                    item.Call.Length > 0 ? item.Call : $"#{item.Pk}", item.When, RowCount(item), RowLocation(item), RowNotes(item)])
                 {
                     Tag = item,
                     Checked = item.TickedAtStart,
@@ -258,6 +295,7 @@ namespace CallsignLookup
             _populating = false;
 
             SetStage(Stage.Ready);
+            _allAddress.Visible = _allQrz.Visible = _items.Any(i => i.AlternativeChanges != null);
             UpdateApplyButton();
             if (_qsos.Items.Count > 0) _qsos.Items[0].Selected = true;
         }
@@ -382,21 +420,115 @@ namespace CallsignLookup
             _apply.Enabled = _stage == Stage.Ready && n > 0;
         }
 
+        // Which location a QSO uses, when QRZ's and the address's disagree.
+        private static string RowLocation(HrdBatchItem item) =>
+            item.AlternativeChanges == null ? "" : item.UseAlternative ? "address" : "QRZ";
+
+        private static string RowCount(HrdBatchItem item) => item.Skipped != null ? "-" : item.Active!.Changes.Count.ToString();
+
+        private static string RowNotes(HrdBatchItem item)
+        {
+            if (item.Skipped != null) return "skipped: " + item.Skipped;
+            var changes = item.Active!;
+            if (!changes.Any) return "nothing to change";
+            return changes.Warnings.Count > 0
+                ? changes.Warnings[0] + (changes.Warnings.Count > 1 ? $" (+{changes.Warnings.Count - 1} more)" : "")
+                : "";
+        }
+
+        private ListViewItem? SelectedRow => _qsos.SelectedItems.Count > 0 ? _qsos.SelectedItems[0] : null;
+
+        // A tick in the Location choice: the selected QSO uses QRZ's location or the
+        // address's. Always exactly one is ticked.
+        private void ChoiceChanged(bool useAddress)
+        {
+            if (_settingChoice || SelectedRow is not { Tag: HrdBatchItem { AlternativeChanges: not null } item } row) return;
+            var box = useAddress ? _choiceAddress : _choiceQrz;
+            var other = useAddress ? _choiceQrz : _choiceAddress;
+
+            _settingChoice = true;
+            try
+            {
+                if (box.Checked)
+                {
+                    other.Checked = false;
+                    item.UseAlternative = useAddress;
+                }
+                else
+                {
+                    box.Checked = true;   // unticking one just ticks it again: one is always chosen
+                    return;
+                }
+            }
+            finally
+            {
+                _settingChoice = false;
+            }
+
+            RefreshRow(row, item);
+            ShowDetails();
+            UpdateApplyButton();
+        }
+
+        private void RefreshRow(ListViewItem row, HrdBatchItem item)
+        {
+            row.SubItems[2].Text = RowCount(item);
+            row.SubItems[3].Text = RowLocation(item);
+            row.SubItems[4].Text = RowNotes(item);
+            row.ForeColor = item.Applicable ? _qsos.ForeColor : SystemColors.GrayText;
+
+            // A QSO with something to write is ticked, one with nothing isn't. Set
+            // under _populating so the "only a QSO with changes can be ticked" check
+            // in Qsos_ItemCheck lets it through.
+            _populating = true;
+            try { row.Checked = item.Applicable; }
+            finally { _populating = false; }
+        }
+
+        // The same location choice for every QSO that has one.
+        private void SetAllLocations(bool useAddress)
+        {
+            foreach (ListViewItem row in _qsos.Items)
+            {
+                if (row.Tag is not HrdBatchItem { AlternativeChanges: not null } item) continue;
+                item.UseAlternative = useAddress;
+                RefreshRow(row, item);
+            }
+            ShowDetails();
+            UpdateApplyButton();
+        }
+
         private void ShowDetails()
         {
             _details.Items.Clear();
             _notes.Clear();
-            if (_qsos.SelectedItems.Count == 0 || _qsos.SelectedItems[0].Tag is not HrdBatchItem item) return;
+            _choicePanel.Visible = false;
+            if (SelectedRow?.Tag is not HrdBatchItem item) return;
 
             if (item.Skipped != null)
             {
                 _notes.Text = $"Skipped: {item.Skipped}";
                 return;
             }
-            foreach (var change in item.Changes!.Changes)
+            var changes = item.Active!;
+            foreach (var change in changes.Changes)
                 _details.Items.Add(new ListViewItem([change.Label, HrdBatchFiller.Show(change.Old), HrdBatchFiller.Show(change.New)]));
-            if (!item.Changes.Any) _details.Items.Add(new ListViewItem(["", "Everything already matched - nothing to change.", ""]));
-            _notes.Text = string.Join(Environment.NewLine, item.Changes.Warnings.Select(w => "• " + w));
+            if (!changes.Any) _details.Items.Add(new ListViewItem(["", "Everything already matched - nothing to change.", ""]));
+
+            var lines = new List<string>();
+            if (item.AlternativeChanges != null)
+            {
+                lines.Add("QRZ's location is in another state than its record lists - tick which location to use.");
+                _settingChoice = true;
+                _choiceQrz.Text = $"QRZ's location: {item.QrzLocationText}";
+                _choiceAddress.Text = $"The address's location: {item.AlternativeLocationText}";
+                _choiceQrz.Checked = !item.UseAlternative;
+                _choiceAddress.Checked = item.UseAlternative;
+                _settingChoice = false;
+                _choicePanel.Visible = _stage == Stage.Ready;
+            }
+            lines.AddRange(changes.Warnings);
+            _notes.Text = string.Join(Environment.NewLine, lines.Select(w => "• " + w));
         }
     }
 }

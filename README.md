@@ -53,13 +53,22 @@ A special-event page often has no real location: lat/long and grid are blank or 
 
 The address is the one in HRD's **Address** box on the Location tab, which you can correct (from the certificate address on the QRZ page, say); if that has nothing, QRZ's own city, state and ZIP. The report (and the main window's status line) always says which of the three was used and that the location is approximate. County, zones and ARRL section follow the new place, not QRZ's. The lookups go to [OpenStreetMap's Nominatim](https://nominatim.org/release-docs/latest/api/Search/) service, so the address text is sent there; the app identifies itself, makes at most one request a second, and remembers answers while it's running. QRZ's website, which has the page's own certificate address, isn't read: its terms don't allow automated access, and its XML service doesn't carry it.
 
+### When QRZ's location and its state disagree
+
+Sometimes QRZ has a real location that is in another state than the one its own record lists. The Bigfoot special-event stations are the example: W7F's record says Tacoma, WA, but its lat/long is in Maricopa County, AZ. One of the two is wrong for your QSO, so the report warns (*"QRZ's location (DM33up - Maricopa County, AZ) is in another state than the one its record lists (WA) - check which is right"*) and you choose:
+
+- **Fill HRD QSO** asks before it touches HRD: **Use QRZ's location**, **Use the address's location** (found as above from the address in HRD's Address box), or Cancel.
+- **Fill selected...** gives each such QSO a **Location** column (`QRZ` or `address`) and two tick boxes in its detail pane, one of which is always ticked. **Address location for all** and **QRZ location for all** set every such QSO at once. A QSO with nothing left to write once you've chosen is unticked.
+
+QRZ's location is the default. US stations only.
+
 ## Filling many QSOs at once
 
 **Fill selected...** (bottom row of the main window) does the same cleanup on QSOs you have selected in HRD's log:
 
 1. In HRD Logbook, select the QSOs in the log and press **Ctrl+C**, then click **Fill selected...**.
 2. A warning says this changes HRD's log file directly, and asks you to make sure no Add/Edit window is open (one saved later would undo the changes). If one is open, it offers to close it without saving.
-3. Each callsign is looked up on QRZ and the same rules as above are applied (including **Working from** and **Clear QSL via in HRD**). The preview lists every QSO with what would change; click one to see old and new values field by field. QSOs with nothing to change, or where QRZ's record is for another callsign, start unticked or greyed.
+3. Each callsign is looked up on QRZ and the same rules as above are applied (including **Working from** and **Clear QSL via in HRD**). The preview lists every QSO with what would change; click one to see old and new values field by field. QSOs with nothing to change, or where QRZ's record is for another callsign, start unticked or greyed. Where QRZ's location and its own state disagree, you [choose which location is used](#when-qrzs-location-and-its-state-disagree).
 4. **Apply** writes the ticked QSOs. First it checks nothing has changed in HRD since the preview, makes a backup of the log beside it (`<log> backup <date time> before Callsign Lookup batch fill.hrdsql`; the last 10 of these are kept), writes everything in one transaction (all or nothing), reads it back, and asks HRD to reload through its IP Client port. A summary shows what changed and can be copied.
 5. **Undo this batch** puts every changed field back as it was (a backup is made first), unless a QSO has been changed since.
 

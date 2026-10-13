@@ -241,9 +241,13 @@ namespace CallsignLookup.Services.Hrd
             {
                 plan.Warnings.Add("QRZ has no location for this station - location, grid, zones, section and IOTA left as they are.");
             }
-            else if (!lookup.QrzHadLocation || record.Latitude == null)
+            else
             {
-                plan.Warnings.Add($"Location is approximate: {lookup.LocationSource}.");
+                if (!lookup.QrzHadLocation || record.Latitude == null)
+                    plan.Warnings.Add($"Location is approximate: {lookup.LocationSource}.");
+                if (AddressLocator.LocationDisagreesWithState(lookup))
+                    plan.Warnings.Add($"QRZ's location ({AddressLocator.Describe(lookup)}) is in another state than the one its " +
+                                      $"record lists ({record.State}) - check which is right.");
             }
 
             // State and US county: where the QSO was - the park's for a POTA
