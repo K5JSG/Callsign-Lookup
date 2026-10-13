@@ -15,12 +15,20 @@ namespace CallsignLookup.Services
         public int? ItuZone { get; init; }
         public ArrlSectionMatch? ArrlSection { get; init; }
         public IotaMatch? Iota { get; init; }
+
+        // True when the location is QRZ's own (its lat/long or its grid square);
+        // false when QRZ gave none - or a placeholder like AA00aa - and it's
+        // from the station's address or there is none.
+        public bool QrzHadLocation { get; init; }
+
+        // Said when there's no usable location at all. Empty otherwise.
+        public string LocationNote { get; set; } = "";
     }
 
     // The whole lookup: callsign -> QRZ record -> a location -> grid square,
     // county, CQ/ITU zone, ARRL section and IOTA island, all computed locally from that
     // location rather than trusted from QRZ's own (user-entered) fields.
-    public sealed class CallsignLookupService(QrzService qrz)
+    public sealed class CallsignLookupService(QrzService qrz, IGeocoder? geocoder = null)
     {
         // A portable call (KL4RL/W2, VE3/KL4RL, K5JSG/P) is looked up as it
         // is first, as it may have a QRZ page of its own. If not, QRZ
@@ -28,6 +36,20 @@ namespace CallsignLookup.Services
         // says "Not found: W2" (tested 2026-10-06) - so the home call is
         // looked up next.
         public async Task<LookupResult> LookupAsync(string callsign, CancellationToken cancellationToken = default)
+        {
+            var result = await LookupOwnPageAsync(callsign, cancellationToken);
+            if (result.Latitude != null) return result;
+
+            // QRZ's record has no usable location (W7I's is the South Pole's AA00aa;
+            // the web page's "QRZ Admin KO7T" isn't in QRZ's XML, tested 2026-10-12).
+            // The record's own city, state and ZIP are the next best.
+            result = await AddressLocator.UseAddressAsync(result, "", geocoder, cancellationToken);
+            if (result.Latitude == null)
+                result.LocationNote = $"QRZ has no usable location for {result.Qrz.Call}, so its grid, zones and county can't be worked out.";
+            return result;
+        }
+
+        private async Task<LookupResult> LookupOwnPageAsync(string callsign, CancellationToken cancellationToken)
         {
             string call = callsign.Trim().ToUpperInvariant();
             string home = HomeCall(call);
@@ -62,11 +84,16 @@ namespace CallsignLookup.Services
             double? lat = record.Latitude, lon = record.Longitude;
             string source;
 
+            // A QRZ record with nowhere real to put it (W7I's is grid AA00aa, at
+            // the South Pole) is a record with no location, not one there.
+            if (lat.HasValue && lon.HasValue && IsPlaceholderLocation(lat.Value, lon.Value)) lat = lon = null;
+            bool usableGrid = !record.Grid.StartsWith("AA00", StringComparison.OrdinalIgnoreCase);
+
             if (lat.HasValue && lon.HasValue)
             {
                 source = "QRZ lat/long" + (record.GeoLoc.Length > 0 ? $" (from {DescribeGeoLoc(record.GeoLoc)})" : "");
             }
-            else if (Maidenhead.TryGetCenter(record.Grid, out double gridLat, out double gridLon))
+            else if (usableGrid && Maidenhead.TryGetCenter(record.Grid, out double gridLat, out double gridLon))
             {
                 // No lat/long (typically an account without an XML subscription) -
                 // the center of the QRZ grid square is the next best thing.
@@ -84,8 +111,13 @@ namespace CallsignLookup.Services
                 };
             }
 
-            return Resolve(record, lat.Value, lon.Value, source, Maidenhead.ToGridSquare(lat.Value, lon.Value));
+            return Resolve(record, lat.Value, lon.Value, source, Maidenhead.ToGridSquare(lat.Value, lon.Value), qrzHadLocation: true);
         }
+
+        // 0,0 ("null island") and the AA00 grid square at the South Pole - what
+        // QRZ and loggers put when there's no real location.
+        internal static bool IsPlaceholderLocation(double lat, double lon) =>
+            (lat == 0 && lon == 0) || (lat <= -89 && lon <= -178);
 
         // The same, but from a grid square the user typed in place of the
         // QRZ record's location (FW1P: the record's grid is on Futuna, the
@@ -104,7 +136,7 @@ namespace CallsignLookup.Services
         public static LookupResult ResolveAt(QrzCallsignRecord record, double lat, double lon, string source) =>
             Resolve(record, lat, lon, source, Maidenhead.ToGridSquare(lat, lon));
 
-        private static LookupResult Resolve(QrzCallsignRecord record, double lat, double lon, string source, string gridSquare)
+        private static LookupResult Resolve(QrzCallsignRecord record, double lat, double lon, string source, string gridSquare, bool qrzHadLocation = false)
         {
             // Counties only for US stations - and for those, always one (the
             // nearest, if the point is just outside every outline). Anywhere
@@ -127,6 +159,7 @@ namespace CallsignLookup.Services
                 Latitude = lat,
                 Longitude = lon,
                 LocationSource = source,
+                QrzHadLocation = qrzHadLocation,
                 GridSquare = gridSquare,
                 County = county,
                 CqZone = ZoneLookupService.FindCqZone(lat, lon),

@@ -447,6 +447,16 @@ namespace CallsignLookup.Tests
             Assert.DoesNotContain(plan.Warnings, w => w.Contains("My Station"));
         }
 
+        [Fact]
+        public void MyStation_AtTheLocatorsCentre_IsTheSameStation()
+        {
+            // As WSJT-X logs it: Home's locator with only the locator's centre as the position.
+            var plan = PlanWithStation("FN13ah", "43.3125", "-77.958333");
+
+            Assert.Equal(HomeProfile, plan.Profile);
+            Assert.DoesNotContain(plan.Warnings, w => w.Contains("My Station"));
+        }
+
         [Theory]
         [InlineData("FN13gd", "43.133482", "-77.44069", "K5JSG")]   // Penfield
         [InlineData("FN13ah", "43.302941", "-77.921021", "K5JSG")]  // Contesting - same grid, other spot

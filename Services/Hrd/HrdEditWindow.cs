@@ -52,6 +52,51 @@ namespace CallsignLookup.Services.Hrd
             return null;
         }
 
+        // Every open Edit/Add window (HRD can have several).
+        public static List<HrdEditWindow> FindAll()
+        {
+            var windows = new List<HrdEditWindow>();
+            foreach (var process in Process.GetProcessesByName("HRDLogBook"))
+            {
+                using (process)
+                {
+                    var byProcess = new PropertyCondition(AutomationElement.ProcessIdProperty, process.Id);
+                    var isEditWindow = new PropertyCondition(AutomationElement.AutomationIdProperty, WindowId);
+                    foreach (AutomationElement top in AutomationElement.RootElement.FindAll(TreeScope.Children, byProcess))
+                        foreach (AutomationElement window in top.FindAll(TreeScope.Subtree, isEditWindow))
+                            windows.Add(new HrdEditWindow(window));
+                }
+            }
+            return windows;
+        }
+
+        // Presses the window's Cancel button, which throws away what's in it
+        // and closes it. False if it's still open afterwards - HRD asking
+        // something, say - or has no Cancel button to press.
+        public bool CloseWithoutSaving()
+        {
+            AutomationElement? cancel = null;
+            foreach (AutomationElement e in _window.FindAll(TreeScope.Descendants,
+                         new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button)))
+            {
+                if (e.Current.AutomationId.EndsWith(".btnCancel", StringComparison.Ordinal) ||
+                    e.Current.Name.Replace("&", "").Trim().Equals("Cancel", StringComparison.OrdinalIgnoreCase))
+                {
+                    cancel = e;
+                    break;
+                }
+            }
+            if (cancel == null) return false;
+
+            ((InvokePattern)cancel.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+            for (int i = 0; i < 10; i++)
+            {
+                Thread.Sleep(300);
+                if (!IsOpen) return true;
+            }
+            return false;
+        }
+
         public bool IsOpen
         {
             get

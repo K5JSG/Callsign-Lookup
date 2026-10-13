@@ -14,7 +14,7 @@ Each result is in its own read-only box: copy one with Ctrl+C or right-click →
 
 The **Grid Square** box is the exception: if the grid on the QRZ record is wrong, paste or type the right one there, and every field is worked out again from the centre of that grid. Everything else, such as the DXCC entity and state, still comes from the QRZ record. A 6-character grid takes effect as soon as it's complete; press Enter for a 4-character one. Use 6 characters for islands, because the centre of a 4-character square is often out at sea.
 
-If you log with HRD Logbook, it can also fill in the QSO you have open there: see [Filling in a QSO in HRD Logbook](#filling-in-a-qso-in-hrd-logbook).
+If you log with HRD Logbook, it can also fill in the QSO you have open there, or a whole selection of QSOs at once: see [Filling in a QSO in HRD Logbook](#filling-in-a-qso-in-hrd-logbook) and [Filling many QSOs at once](#filling-many-qsos-at-once).
 
 Built by Jeremy S. Gaynor, K5JSG.
 
@@ -29,8 +29,8 @@ If you log with [Ham Radio Deluxe](https://www.hamradiodeluxe.com/) Logbook, Cal
    - checks name, QTH, state and US county against QRZ (for a POTA QSO the state and county are the park's instead), and fills any that are blank or don't match (a name with HRD's quoted nickname, `WILLIAM "Bill" HAMALAINEN`, matches). A portable call (KL4RL/W2, VE3/KL4RL) is looked up as it is first; if QRZ has no page for it, the home call (the longest part, KL4RL) is looked up instead, and that counts as a match;
    - takes POTA park references out of the Comment (`US-3033`, `POTA: US-4579 & US-4566`) and puts them in the POTA field in place of whatever was there, with the park's name and location from HRD's own park list. Several parks go in as a comma list, like HRD's "Multiple POTAs"; the first park is the one entered, so the POTA tab and the QSO get its name and location. Only the park references come out, with a leading "POTA:" and the spaces (and any comma or dash joining them) around them; any other text in the Comment stays exactly as written (`Nice signal POTA: US-3033 73` becomes `Nice signal 73`). If something that looks like a park isn't in HRD's park list, the Comment and POTA field are left alone and the report says so;
    - for a POTA QSO, sets the Country to the park's DXCC entity (from HRD's park list), so a station working portable from another country (KL4RL/VE9, an Alaska call in a New Brunswick park) gets the park's country, state/province, zones and section rather than its QRZ home ones. The QTH stays the QRZ home one. A park outside the US and Canada clears the state; a US county or ARRL section still left in HRD after the fill is flagged in the report (HRD empties the county itself when the Country changes, so it usually isn't). HRD's country names (it calls 230 "Fed. Republic of Germany") come from `Data/hrdCountries.json`; for an entity not in it, the report asks you to check the Country by hand;
-   - re-selects the My Station profile, but only if the QSO's My Station is already that station (same callsign, locator and position) or has none yet. A QSO that has a different station, such as an old Penfield QSO opened while working from Home, is left as it is and the report warns that the stations don't match;
-   - sets the QSO's location to the park (or, for no park, the QRZ location), and from that the grid square, CQ and ITU zones and ARRL section, worked out as in the main window;
+   - re-selects the My Station profile, but only if the QSO's My Station is already that station (same callsign and locator, and the position either matches the profile's or is just the locator's centre, which is all WSJT-X logs) or has none yet. A QSO that has a different station, such as an old Penfield QSO opened while working from Home, is left as it is and the report warns that the stations don't match;
+   - sets the QSO's location to the park (or, for no park, the QRZ location), and from that the grid square, CQ and ITU zones and ARRL section, worked out as in the main window. If QRZ has no usable location for the station (none, or a placeholder such as grid `AA00aa` or lat/long 0,0, which special-event pages often carry), the address is used instead, see [Stations with no location on QRZ](#stations-with-no-location-on-qrz);
    - clears the distance and presses HRD's Recalc (HRD measures grid square centre to grid square centre, from your My Station locator);
    - clears QSL Manager/VIA, unless **Clear QSL via in HRD** (next to Stay on top, remembered) is unticked, in which case it's left alone. A Silent Key note in it (`SK March 28, 2025`, `SK2023`) is never cleared;
    - for a Silent Key (QRZ's record is `CALL/SK2023`, or `/SK` followed by anything), puts `SK 2023` in QSL Manager/VIA (ahead of any other note it keeps if Clear QSL via is off; an SK note already there is left) and ticks the Silent Key box on the Contact tab, whichever way Clear QSL via is set;
@@ -41,12 +41,34 @@ If you log with [Ham Radio Deluxe](https://www.hamradiodeluxe.com/) Logbook, Cal
 
 Only blank fields and ones that don't match are changed; a location within about 100 m of the right one is left alone. If QRZ's page for the callsign is for a different callsign (a changed call; a portable call's home call and a Silent Key's `/SK` suffix don't count), it asks before going on. An IOTA reference in HRD for a group nowhere near the location is cleared; one whose area the location is in (it could be a small island the island data hasn't got) is only flagged.
 
-Callsign Lookup fills HRD's window through Windows UI Automation, the same interface screen readers use, so HRD needs no add-ons or settings. It only reads the description, callsign, locator and position of your My Station profiles, not the passwords stored with them. Tested with HRD Logbook 6.9.
+Callsign Lookup fills HRD's window through Windows UI Automation, the same interface screen readers use, so HRD needs no add-ons or settings. It only reads the description, callsign, locator, position and the My Station values a profile copies into a QSO (city, street, rig and so on), not the passwords stored beside them. Tested with HRD Logbook 6.9.
+
+### Stations with no location on QRZ
+
+A special-event page often has no real location: lat/long and grid are blank or a placeholder (W7I's is `AA00aa`, the South Pole) and the ZIP may be wrong. Then, in the main window, Fill HRD QSO and the batch fill, the station's address is used to find an approximate location, best first:
+
+1. **A street address**: that point.
+2. **A PO box, or just a ZIP**: a post office in that mail area. The ZIP is first checked against the state (an Idaho ZIP on a Washington address is ignored, and the report says so), and the post office must be in the same city and share the ZIP's first three digits, because a PO-box-only ZIP is housed in a post office whose own address has a different ZIP.
+3. **A city and state**: the middle of the city.
+
+The address is the one in HRD's **Address** box on the Location tab, which you can correct (from the certificate address on the QRZ page, say); if that has nothing, QRZ's own city, state and ZIP. The report (and the main window's status line) always says which of the three was used and that the location is approximate. County, zones and ARRL section follow the new place, not QRZ's. The lookups go to [OpenStreetMap's Nominatim](https://nominatim.org/release-docs/latest/api/Search/) service, so the address text is sent there; the app identifies itself, makes at most one request a second, and remembers answers while it's running. QRZ's website, which has the page's own certificate address, isn't read: its terms don't allow automated access, and its XML service doesn't carry it.
+
+## Filling many QSOs at once
+
+**Fill selected...** (bottom row of the main window) does the same cleanup on QSOs you have selected in HRD's log:
+
+1. In HRD Logbook, select the QSOs in the log and press **Ctrl+C**, then click **Fill selected...**.
+2. A warning says this changes HRD's log file directly, and asks you to make sure no Add/Edit window is open (one saved later would undo the changes). If one is open, it offers to close it without saving.
+3. Each callsign is looked up on QRZ and the same rules as above are applied (including **Working from** and **Clear QSL via in HRD**). The preview lists every QSO with what would change; click one to see old and new values field by field. QSOs with nothing to change, or where QRZ's record is for another callsign, start unticked or greyed.
+4. **Apply** writes the ticked QSOs. First it checks nothing has changed in HRD since the preview, makes a backup of the log beside it (`<log> backup <date time> before Callsign Lookup batch fill.hrdsql`; the last 10 of these are kept), writes everything in one transaction (all or nothing), reads it back, and asks HRD to reload through its IP Client port. A summary shows what changed and can be copied.
+5. **Undo this batch** puts every changed field back as it was (a backup is made first), unless a QSO has been changed since.
+
+This writes into HRD's SQLite log directly, because HRD's log list can't be driven through UI Automation. It uses the same planning code as the single fill, so the results match what HRD's own Update saves.
 
 ## How it works
 
 1. The callsign is looked up through QRZ's [XML data service](https://www.qrz.com/docs/xml/current_spec.html) with your QRZ login.
-2. The station's location is the lat/long on the QRZ record. If the record has no lat/long (lat/long needs a QRZ **XML Logbook Data subscription**), the center of the record's grid square is used, and the status bar says the location is approximate.
+2. The station's location is the lat/long on the QRZ record. If the record has no lat/long (lat/long needs a QRZ **XML Logbook Data subscription**), the center of the record's grid square is used, and the status bar says the location is approximate. A placeholder (lat/long 0,0, or the `AA00` grid square at the South Pole) counts as no location, and the station's address is used instead, see [Stations with no location on QRZ](#stations-with-no-location-on-qrz).
 3. Everything else is computed **offline** from that location rather than taken from QRZ's own (user-entered) county/zone fields:
    - **Grid square**: standard Maidenhead math.
    - **County**: US stations only, going by the DXCC entity number on the QRZ record: United States (291) plus the separate entities that still have Census counties: Alaska (6), Hawaii (110), Puerto Rico (202), US Virgin Islands (285), Guam (103), American Samoa (9), Swains Island (515) and Mariana Islands (166). Other US possessions (Guantanamo Bay, Navassa, Wake, etc.) get no county. Point-in-polygon against US Census county boundaries (`Data/counties.json`, shared with POTA Activator Park Activations). A US point outside every county outline (just offshore, a barrier island, an approximate grid-square center in a lake) gets the nearest county in the state on its QRZ record. Stations anywhere else, Canada included, never get a county.
@@ -55,6 +77,8 @@ Callsign Lookup fills HRD's window through Windows UI Automation, the same inter
    - **IOTA**: the IOTA directory gives each group's DXCC entities, a rough bounding box and the names of the islands that count for it, but not where those islands are. So `Data/iotaIslands.json` holds the outline of every listed island, taken from OpenStreetMap and matched to the IOTA list by name. The station is on whichever island outline contains its location (or is within about 1 km of it), for a group whose box and DXCC entity fit, so the Island field is the island's name as IOTA lists it. IOTA often lists only a group's main islands, so the file also has the named islands within about 5 km of a listed one (e.g. Aunuʻu, off Tutuila, for OC-045). A station on one of those gets the group and the island's own name, with a note to check that it counts. Islands inside a listed island, such as those in Scottish lochs, are left out: they can't count for IOTA. A station that isn't on a listed island (the mainland, or an approximate location out at sea) gets the IOTA reference from its QRZ record if it has one, and the status bar says so. If the station is on an island but its QRZ record gives a different IOTA reference (say, an address and IOTA on Wallis but a grid square on Futuna), the location still decides, and the status bar warns that the two disagree. The IOTA list itself is downloaded from [iota-world.org](https://www.iota-world.org/) into `%LocalAppData%\Callsign Lookup\iota.json` and refreshed weekly, so new groups show up without an app update. Until the first download (or if it fails) the copy shipped in `Data/iota.json` is used. New islands in a downloaded list have no outline until the island data is rebuilt, so when IOTA has added any, a warning bar at the top of the window lists them and says the island data needs updating. `python Tools/build_iota_islands.py --update <cache dir>` does that in a few minutes: it rebuilds only the groups IOTA changed.
 
 Your QRZ password is stored encrypted with Windows DPAPI (readable only by your Windows account on that PC) in `%LocalAppData%\Callsign Lookup\settings.json`.
+
+Address search: [OpenStreetMap](https://www.openstreetmap.org/copyright) data via Nominatim (ODbL).
 
 Map data: Ontario census divisions © Statistics Canada ([Open Government Licence – Canada](https://open.canada.ca/en/open-government-licence-canada)); Algonquin Park and island outlines © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) (ODbL). IOTA directory from [Islands On The Air](https://www.iota-world.org/).
 
@@ -85,11 +109,13 @@ This publishes a self-contained, single-file executable plus its `Data` folder t
 
 | Path | What it is |
 |------|------------|
-| `MainForm.cs`, `QrzLoginForm.cs`, `HrdFillReportForm.cs` | The WinForms UI |
+| `MainForm.cs`, `QrzLoginForm.cs`, `HrdFillReportForm.cs`, `BatchFillForm.cs` | The WinForms UI (the last is the batch preview and summary) |
 | `Services/Hrd/HrdQsoFiller.cs` | Works out what an HRD QSO needs and fills it in, in the order above |
 | `Services/Hrd/HrdEditWindow.cs` | Reads and fills HRD Logbook's log entry window through UI Automation |
 | `Services/Hrd/HrdPotaParks.cs`, `HrdStationProfiles.cs` | HRD's POTA park list and My Station profiles |
 | `Services/Hrd/HrdCountries.cs` | HRD's name for each DXCC entity, for its Country box |
+| `Services/Hrd/HrdLogDatabase.cs`, `HrdRowMapper.cs`, `HrdBatchFiller.cs`, `HrdClipboard.cs` | The batch fill: HRD's SQLite log (read, backup, write, refresh), turning a log row into the planner's input and its changes back into columns, the preview/apply/undo, and reading the Ctrl+C selection |
+| `Services/GeocodingService.cs`, `AddressLocator.cs` | Nominatim address search, and working out a location from an address for stations QRZ has none for |
 | `AppLogo.cs`, `logo.ico`, `logo-256.png` | Program icon and window logo, built into the exe (`Logo.png` is the full-size source artwork) |
 | `Services/QrzService.cs` | QRZ XML client: login, session key reuse, re-login on timeout |
 | `Services/CallsignLookupService.cs` | Callsign → location → grid/county/zones/section |

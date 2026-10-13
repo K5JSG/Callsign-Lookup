@@ -15,5 +15,12 @@ namespace CallsignLookup.Services.Hrd
 
         // Null for an entity not in the file.
         public static string? Name(int dxcc) => Names.Value.TryGetValue(dxcc, out string? name) ? name : null;
+
+        // The DXCC number for HRD's name for it (as in its Country box); null
+        // when the name isn't in the file.
+        public static int? Dxcc(string name) =>
+            Names.Value.FirstOrDefault(kv => kv.Value.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase)) is { Value: not null } hit
+                ? hit.Key
+                : null;
     }
 }

@@ -217,6 +217,28 @@ namespace CallsignLookup.Tests
         }
 
         [Fact]
+        public void Resolve_PlaceholderLocation_IsNoLocation()
+        {
+            // W7I's QRZ record: grid AA00aa (the South Pole), with its lat/long to match.
+            var record = new QrzCallsignRecord
+            {
+                Call = "W7I", Grid = "AA00aa", Latitude = -89.979167, Longitude = -179.958333,
+                Country = "United States", State = "WA", Dxcc = 291,
+            };
+            var result = CallsignLookupService.Resolve(record);
+
+            Assert.Null(result.Latitude);
+            Assert.Equal("", result.GridSquare);
+            Assert.Null(result.CqZone);
+            Assert.Contains("no lat/long or grid", result.LocationSource);
+
+            // Placeholder lat/long but a real grid: the grid is used.
+            var withGrid = CallsignLookupService.Resolve(new QrzCallsignRecord
+                { Call = "K5TST", Grid = "EM12kv", Latitude = 0, Longitude = 0, Country = "United States", State = "TX", Dxcc = 291 });
+            Assert.Equal("EM12kv", withGrid.GridSquare);
+        }
+
+        [Fact]
         public void Resolve_Canada_UsesProvince_NoCounty()
         {
             var record = new QrzCallsignRecord { Call = "VE6TST", Latitude = 51.0447, Longitude = -114.0719, Country = "Canada", State = "AB" };

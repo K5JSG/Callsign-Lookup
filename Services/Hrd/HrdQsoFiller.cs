@@ -241,7 +241,7 @@ namespace CallsignLookup.Services.Hrd
             {
                 plan.Warnings.Add("QRZ has no location for this station - location, grid, zones, section and IOTA left as they are.");
             }
-            else if (record.Latitude == null)
+            else if (!lookup.QrzHadLocation || record.Latitude == null)
             {
                 plan.Warnings.Add($"Location is approximate: {lookup.LocationSource}.");
             }
@@ -414,8 +414,11 @@ namespace CallsignLookup.Services.Hrd
         }
 
         // Whether the QSO's My Station is the profile: same callsign, locator
-        // and position (within about 100 m). Null when that can't be told -
-        // the profile has no position, or the QSO has no My Station yet.
+        // and position (within about 100 m). A QSO logged by WSJT-X has only
+        // the locator's centre for a position (43.3125, -77.9583 for FN13ah) -
+        // that is the same station, and picking the profile is what puts the
+        // exact position in. Null when it can't be told - the profile has no
+        // position, or the QSO has no My Station yet.
         internal static bool? StationMatches(HrdStationProfile profile, Func<string, string> get)
         {
             if (profile.Locator.Length == 0 || profile.Latitude is not double pLat || profile.Longitude is not double pLon)
@@ -425,9 +428,11 @@ namespace CallsignLookup.Services.Hrd
                 !double.TryParse(get("edtMY_LON"), NumberStyles.Float, CultureInfo.InvariantCulture, out double lon))
                 return null;
 
+            bool atLocatorCentre = Maidenhead.TryGetCenter(grid, out double centreLat, out double centreLon) &&
+                                   Math.Abs(lat - centreLat) < 0.0005 && Math.Abs(lon - centreLon) < 0.0005;
             string call = get("edtSTATION_CALLSIGN");
             return grid.Equals(profile.Locator, StringComparison.OrdinalIgnoreCase) &&
-                   Math.Abs(lat - pLat) < 0.001 && Math.Abs(lon - pLon) < 0.001 &&
+                   (atLocatorCentre || Math.Abs(lat - pLat) < 0.001 && Math.Abs(lon - pLon) < 0.001) &&
                    (call.Length == 0 || call.Equals(profile.Callsign, StringComparison.OrdinalIgnoreCase));
         }
 

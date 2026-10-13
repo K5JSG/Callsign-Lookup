@@ -8,6 +8,8 @@ namespace CallsignLookup
     {
         private readonly AppSettings _settings;
         private QrzService? _qrz;
+        // Address lookups for a station whose QRZ record has no location (OpenStreetMap).
+        private readonly NominatimGeocoder _geocoder = new();
 
         // The last lookup, so a grid square typed into the Grid Square box can
         // be worked out against the same QRZ record.
@@ -128,14 +130,15 @@ namespace CallsignLookup
             try
             {
                 _qrz ??= new QrzService(_settings.QrzUsername, _settings.GetQrzPassword());
-                var result = await new CallsignLookupService(_qrz).LookupAsync(callsign);
+                var result = await new CallsignLookupService(_qrz, _geocoder).LookupAsync(callsign);
                 _lastResult = result;
                 ShowResult(result);
                 string status = $"Found {result.Qrz.Call}.";
                 // Worth knowing when the lat/long isn't QRZ's own.
-                if (result.Qrz.Latitude == null || result.Qrz.Longitude == null)
+                if (!result.QrzHadLocation || result.Qrz.Latitude == null || result.Qrz.Longitude == null)
                     status += $"  Location: {result.LocationSource}.";
                 if (result.Iota?.Note.Length > 0) status += $"  IOTA: {result.Iota.Note}.";
+                if (result.LocationNote.Length > 0) status += $"  {result.LocationNote}";
                 if (_qrz.LoginMessage.Length > 0) status += $"  QRZ: {_qrz.LoginMessage}";
                 UpdateStatus(status);
                 return true;
@@ -277,6 +280,64 @@ namespace CallsignLookup
             _settings.Save();
         }
 
+        // Batch fill: the QSOs selected in HRD's log and copied (Ctrl+C), filled
+        // by writing straight into HRD's log after a preview - see
+        // Services/Hrd/HrdBatchFiller.cs.
+        private async void BtnFillSelected_Click(object? sender, EventArgs e)
+        {
+            const string title = "Fill selected QSOs";
+            var pks = HrdClipboard.ReadFromClipboard();
+            if (pks.Count == 0)
+            {
+                MessageBox.Show(this,
+                    "In HRD Logbook, select the QSOs in the log (click one, then Shift+click or Ctrl+click for more, or Ctrl+A for " +
+                    "all) and press Ctrl+C. Then click Fill selected again.",
+                    title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var log = HrdLogDatabase.Find(out string error);
+            if (log == null)
+            {
+                MessageBox.Show(this, error, title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (MessageBox.Show(this,
+                    $"{pks.Count} QSO{(pks.Count == 1 ? "" : "s")} copied from HRD.\n\n" +
+                    "This changes HRD's log file directly (a backup is made first, and you'll see everything that would change " +
+                    "before anything is written).\n\n" +
+                    "Be sure that no QSO Add or Edit window is open in HRD - one saved afterwards would undo these changes.",
+                    title, MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+                return;
+
+            // Any Add/Edit window left open: offer to close it (without saving).
+            var open = await Task.Run(HrdEditWindow.FindAll);
+            if (open.Count > 0)
+            {
+                var names = await Task.Run(() => open.Select(w => w.Title).ToList());
+                if (MessageBox.Show(this,
+                        $"HRD has {open.Count} Add/Edit window{(open.Count == 1 ? "" : "s")} open:\n\n  {string.Join("\n  ", names)}\n\n" +
+                        "Close without saving? Anything typed in them is thrown away.",
+                        title, MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+                    return;
+
+                var closed = await Task.Run(() => open.Select(w => w.CloseWithoutSaving()).ToList());
+                if (closed.Contains(false))
+                {
+                    MessageBox.Show(this, "HRD didn't close one of its windows (it may be asking something). Close it yourself, then try again.",
+                        title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+            }
+
+            if (!_settings.HasQrzLogin && !PromptForQrzLogin()) return;
+            _qrz ??= new QrzService(_settings.QrzUsername, _settings.GetQrzPassword());
+            using var form = new BatchFillForm(log, new CallsignLookupService(_qrz, _geocoder), _geocoder, pks,
+                cbxStationProfile.SelectedItem as HrdStationProfile, chkClearQslVia.Checked) { TopMost = TopMost };
+            form.ShowDialog(this);
+        }
+
         private void BtnCopy_Click(object? sender, EventArgs e)
         {
             var sb = new StringBuilder();
@@ -414,10 +475,13 @@ namespace CallsignLookup
             UpdateStatus($"Filling in {call} in HRD - leave HRD alone until it's done...");
             try
             {
-                var report = await Task.Run(() =>
+                var report = await Task.Run(async () =>
                 {
                     var qso = HrdQsoFiller.ReadQso(window);
-                    var plan = HrdQsoFiller.Plan(qso, lookup, HrdPotaParks.Find, profile, clearQslVia);
+                    // A station QRZ has no location for: the address in HRD's Address
+                    // box (which the user can correct) locates it instead.
+                    var located = await AddressLocator.UseAddressAsync(lookup, qso.GetValueOrDefault("memoADDRESS", ""), _geocoder);
+                    var plan = HrdQsoFiller.Plan(qso, located, HrdPotaParks.Find, profile, clearQslVia);
                     return HrdQsoFiller.Apply(window, plan);
                 });
                 int changed = report.Applied.Count(a => a.Took);
