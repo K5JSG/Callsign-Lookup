@@ -102,21 +102,25 @@ namespace CallsignLookup.Services.Hrd
 
         public static HrdFillPlan Plan(
             IReadOnlyDictionary<string, string> qso, LookupResult lookup,
-            Func<string, PotaPark?> findPark, HrdStationProfile? profile, bool clearQslVia = true)
+            Func<string, PotaPark?> findPark, HrdStationProfile? profile, bool clearQslVia = true,
+            bool useSelectedStation = false)
         {
             var record = lookup.Qrz;
             string Get(string id) => qso.TryGetValue(id, out string? v) ? v : "";
 
-            // The selected My Station is only applied to a QSO that already has
-            // that station (a re-pick) or none - not over a different one,
-            // e.g. an old Penfield QSO opened while working from Home.
-            bool stationDiffers = profile != null && StationMatches(profile, Get) == false;
-            var plan = new HrdFillPlan { Callsign = Get("edtCALL"), Profile = stationDiffers ? null : profile };
-            if (stationDiffers)
+            // The selected My Station is applied to a QSO that already has that
+            // station (a re-pick) or none. Over a different one - an old Penfield
+            // QSO opened while working from Home - the user chooses: keep what's
+            // in HRD (the default) or use the selected station.
+            string? here = StationMismatch(qso, profile);
+            bool keepHrdStation = here != null && !useSelectedStation;
+            var plan = new HrdFillPlan { Callsign = Get("edtCALL"), Profile = keepHrdStation ? null : profile };
+            if (here != null)
             {
-                string here = string.Join(" ", new[] { Get("edtMY_CITY"), Get("edtMY_GRIDSQUARE") }.Where(s => s.Length > 0));
-                plan.Warnings.Add($"This QSO's My Station ({(here.Length > 0 ? here : "another station")}) doesn't match the " +
-                                  $"selected \"{profile!.DisplayName}\" - My Station left as it is.");
+                plan.Warnings.Add(keepHrdStation
+                    ? $"This QSO's My Station ({here}) doesn't match the selected \"{profile!.DisplayName}\" - My Station left as it is."
+                    : $"This QSO's My Station ({here}) doesn't match the selected \"{profile!.DisplayName}\" - " +
+                      "replaced by the selected station, as you chose.");
             }
 
             if (!SameStation(plan.Callsign, record.Call))
@@ -423,6 +427,17 @@ namespace CallsignLookup.Services.Hrd
         // that is the same station, and picking the profile is what puts the
         // exact position in. Null when it can't be told - the profile has no
         // position, or the QSO has no My Station yet.
+        // How the QSO's My Station reads ("Penfield FN13gd") when it's a different
+        // station than the selected profile; null when it's the same, can't be
+        // told, or there's no profile.
+        public static string? StationMismatch(IReadOnlyDictionary<string, string> qso, HrdStationProfile? profile)
+        {
+            string Get(string id) => qso.TryGetValue(id, out string? v) ? v : "";
+            if (profile == null || StationMatches(profile, Get) != false) return null;
+            string here = string.Join(" ", new[] { Get("edtMY_CITY"), Get("edtMY_GRIDSQUARE") }.Where(s => s.Length > 0));
+            return here.Length > 0 ? here : "another station";
+        }
+
         internal static bool? StationMatches(HrdStationProfile profile, Func<string, string> get)
         {
             if (profile.Locator.Length == 0 || profile.Latitude is not double pLat || profile.Longitude is not double pLon)

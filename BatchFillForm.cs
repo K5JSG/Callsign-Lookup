@@ -35,6 +35,10 @@ namespace CallsignLookup
         private readonly Panel _choicePanel = new();
         private readonly CheckBox _choiceQrz = new();
         private readonly CheckBox _choiceAddress = new();
+        private readonly CheckBox _stationHrd = new();
+        private readonly CheckBox _stationSelected = new();
+        private readonly Button _allSelectedStation = new();
+        private readonly Button _allHrdStation = new();
         private bool _settingChoice;
 
         private List<HrdBatchItem> _items = [];
@@ -76,7 +80,8 @@ namespace CallsignLookup
             _qsos.Columns.Add("Date / time (UTC)", 130);
             _qsos.Columns.Add("Changes", 70);
             _qsos.Columns.Add("Location", 70);
-            _qsos.Columns.Add("Notes", 490);
+            _qsos.Columns.Add("Station", 70);
+            _qsos.Columns.Add("Notes", 420);
             _qsos.ItemCheck += Qsos_ItemCheck;
             _qsos.ItemChecked += (_, _) => UpdateApplyButton();
             _qsos.SelectedIndexChanged += (_, _) => ShowDetails();
@@ -153,21 +158,32 @@ namespace CallsignLookup
             new ToolTip().SetToolTip(_allAddress, "For every QSO where QRZ's location is in another state than its record lists, use the location the address gives.");
             new ToolTip().SetToolTip(_allQrz, "For every QSO where QRZ's location is in another state than its record lists, use QRZ's location.");
 
-            // QRZ's location disagrees with its own state: two ticks, one of them always on.
+            // For every QSO whose My Station is a different station than the selected one.
+            _allSelectedStation.AutoSize = true;
+            _allSelectedStation.Text = "Selected station for al&l";
+            _allSelectedStation.Visible = false;
+            _allSelectedStation.Click += (_, _) => SetAllStations(useSelected: true);
+            _allHrdStation.AutoSize = true;
+            _allHrdStation.Text = "HRD's station for all";
+            _allHrdStation.Visible = false;
+            _allHrdStation.Click += (_, _) => SetAllStations(useSelected: false);
+            new ToolTip().SetToolTip(_allSelectedStation, "For every QSO whose My Station is a different station than the one selected under Working from, replace it with the selected station.");
+            new ToolTip().SetToolTip(_allHrdStation, "For every QSO whose My Station is a different station than the one selected under Working from, keep what is in HRD.");
+
+            // Two ticks for each choice (location, station), one of each pair always on.
             _choicePanel.Dock = DockStyle.Bottom;
             _choicePanel.Height = 52;
             _choicePanel.Visible = false;
-            foreach (var box in new[] { _choiceQrz, _choiceAddress })
+            foreach (var box in new[] { _choiceQrz, _choiceAddress, _stationHrd, _stationSelected })
             {
                 box.AutoSize = true;
                 box.Left = 8;
+                _choicePanel.Controls.Add(box);
             }
-            _choiceQrz.Top = 4;
-            _choiceAddress.Top = 27;
-            _choicePanel.Controls.Add(_choiceQrz);
-            _choicePanel.Controls.Add(_choiceAddress);
             _choiceQrz.CheckedChanged += (_, _) => ChoiceChanged(useAddress: false);
             _choiceAddress.CheckedChanged += (_, _) => ChoiceChanged(useAddress: true);
+            _stationHrd.CheckedChanged += (_, _) => StationChoiceChanged(useSelected: false);
+            _stationSelected.CheckedChanged += (_, _) => StationChoiceChanged(useSelected: true);
 
             var buttons = new FlowLayoutPanel
             {
@@ -181,6 +197,8 @@ namespace CallsignLookup
             buttons.Controls.Add(_undo);
             buttons.Controls.Add(_openBackup);
             buttons.Controls.Add(_copy);
+            buttons.Controls.Add(_allHrdStation);
+            buttons.Controls.Add(_allSelectedStation);
             buttons.Controls.Add(_allQrz);
             buttons.Controls.Add(_allAddress);
             buttons.Controls.Add(_untickAll);
@@ -236,14 +254,14 @@ namespace CallsignLookup
                     _close.Text = "Cancel";
                     break;
                 case Stage.Applying:
-                    _allAddress.Visible = _allQrz.Visible = false;
+                    _allAddress.Visible = _allQrz.Visible = _allSelectedStation.Visible = _allHrdStation.Visible = false;
                     _choicePanel.Enabled = false;
                     _intro.Text = "Writing to HRD's log...";
                     _apply.Enabled = false;
                     _close.Enabled = false;
                     break;
                 case Stage.Done:
-                    _allAddress.Visible = _allQrz.Visible = false;
+                    _allAddress.Visible = _allQrz.Visible = _allSelectedStation.Visible = _allHrdStation.Visible = false;
                     _choicePanel.Visible = false;
                     _progress.Visible = false;
                     _close.Enabled = true;
@@ -283,7 +301,7 @@ namespace CallsignLookup
             foreach (var item in _items)
             {
                 var row = new ListViewItem([
-                    item.Call.Length > 0 ? item.Call : $"#{item.Pk}", item.When, RowCount(item), RowLocation(item), RowNotes(item)])
+                    item.Call.Length > 0 ? item.Call : $"#{item.Pk}", item.When, RowCount(item), RowLocation(item), RowStation(item), RowNotes(item)])
                 {
                     Tag = item,
                     Checked = item.TickedAtStart,
@@ -295,7 +313,8 @@ namespace CallsignLookup
             _populating = false;
 
             SetStage(Stage.Ready);
-            _allAddress.Visible = _allQrz.Visible = _items.Any(i => i.AlternativeChanges != null);
+            _allAddress.Visible = _allQrz.Visible = _items.Any(i => i.HasLocationChoice);
+            _allSelectedStation.Visible = _allHrdStation.Visible = _items.Any(i => i.HasStationChoice);
             UpdateApplyButton();
             if (_qsos.Items.Count > 0) _qsos.Items[0].Selected = true;
         }
@@ -424,6 +443,10 @@ namespace CallsignLookup
         private static string RowLocation(HrdBatchItem item) =>
             item.AlternativeChanges == null ? "" : item.UseAlternative ? "address" : "QRZ";
 
+        // Which My Station a QSO ends up with, when it has a different one than selected.
+        private static string RowStation(HrdBatchItem item) =>
+            !item.HasStationChoice ? "" : item.UseSelectedStation ? "selected" : "HRD's";
+
         private static string RowCount(HrdBatchItem item) => item.Skipped != null ? "-" : item.Active!.Changes.Count.ToString();
 
         private static string RowNotes(HrdBatchItem item)
@@ -474,7 +497,8 @@ namespace CallsignLookup
         {
             row.SubItems[2].Text = RowCount(item);
             row.SubItems[3].Text = RowLocation(item);
-            row.SubItems[4].Text = RowNotes(item);
+            row.SubItems[4].Text = RowStation(item);
+            row.SubItems[5].Text = RowNotes(item);
             row.ForeColor = item.Applicable ? _qsos.ForeColor : SystemColors.GrayText;
 
             // A QSO with something to write is ticked, one with nothing isn't. Set
@@ -483,6 +507,51 @@ namespace CallsignLookup
             _populating = true;
             try { row.Checked = item.Applicable; }
             finally { _populating = false; }
+        }
+
+        // A tick in the Station choice: the selected QSO keeps the My Station it has in
+        // HRD, or gets the selected one. Always exactly one is ticked.
+        private void StationChoiceChanged(bool useSelected)
+        {
+            if (_settingChoice || SelectedRow is not { Tag: HrdBatchItem { StationChanges: not null } item } row) return;
+            var box = useSelected ? _stationSelected : _stationHrd;
+            var other = useSelected ? _stationHrd : _stationSelected;
+
+            _settingChoice = true;
+            try
+            {
+                if (box.Checked)
+                {
+                    other.Checked = false;
+                    item.UseSelectedStation = useSelected;
+                }
+                else
+                {
+                    box.Checked = true;
+                    return;
+                }
+            }
+            finally
+            {
+                _settingChoice = false;
+            }
+
+            RefreshRow(row, item);
+            ShowDetails();
+            UpdateApplyButton();
+        }
+
+        // The same station choice for every QSO that has one.
+        private void SetAllStations(bool useSelected)
+        {
+            foreach (ListViewItem row in _qsos.Items)
+            {
+                if (row.Tag is not HrdBatchItem { StationChanges: not null } item) continue;
+                item.UseSelectedStation = useSelected;
+                RefreshRow(row, item);
+            }
+            ShowDetails();
+            UpdateApplyButton();
         }
 
         // The same location choice for every QSO that has one.
@@ -516,17 +585,37 @@ namespace CallsignLookup
             if (!changes.Any) _details.Items.Add(new ListViewItem(["", "Everything already matched - nothing to change.", ""]));
 
             var lines = new List<string>();
-            if (item.AlternativeChanges != null)
+            int top = 4;
+            bool location = item.HasLocationChoice, station = item.HasStationChoice;
+            _settingChoice = true;
+            foreach (var box in new[] { _choiceQrz, _choiceAddress }) box.Visible = location;
+            foreach (var box in new[] { _stationHrd, _stationSelected }) box.Visible = station;
+            if (location)
             {
                 lines.Add("QRZ's location is in another state than its record lists - tick which location to use.");
-                _settingChoice = true;
                 _choiceQrz.Text = $"QRZ's location: {item.QrzLocationText}";
                 _choiceAddress.Text = $"The address's location: {item.AlternativeLocationText}";
                 _choiceQrz.Checked = !item.UseAlternative;
                 _choiceAddress.Checked = item.UseAlternative;
-                _settingChoice = false;
-                _choicePanel.Visible = _stage == Stage.Ready;
+                _choiceQrz.Top = top;
+                _choiceAddress.Top = top + 23;
+                top += 48;
             }
+            if (station)
+            {
+                lines.Add($"This QSO's My Station ({item.StationHereText}) is a different station than the selected " +
+                          $"\"{item.StationSelectedText}\" - tick which My Station to use.");
+                _stationHrd.Text = $"Keep what's in HRD: {item.StationHereText}";
+                _stationSelected.Text = $"Use the selected station: {item.StationSelectedText}";
+                _stationHrd.Checked = !item.UseSelectedStation;
+                _stationSelected.Checked = item.UseSelectedStation;
+                _stationHrd.Top = top;
+                _stationSelected.Top = top + 23;
+                top += 48;
+            }
+            _settingChoice = false;
+            _choicePanel.Height = Math.Max(top, 8);
+            _choicePanel.Visible = (location || station) && _stage == Stage.Ready;
             lines.AddRange(changes.Warnings);
             _notes.Text = string.Join(Environment.NewLine, lines.Select(w => "• " + w));
         }

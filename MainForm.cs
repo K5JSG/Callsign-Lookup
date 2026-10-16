@@ -500,9 +500,23 @@ namespace CallsignLookup
                     if (useAddress == true) chosen = read.other;
                 }
 
+                // The QSO's My Station is a different station than the one selected
+                // under Working from: keep HRD's or use the selected one?
+                bool useSelectedStation = false;
+                if (HrdQsoFiller.StationMismatch(read.qso, profile) is string stationHere)
+                {
+                    bool? useSelected = ChooseStation(call, stationHere, profile!);
+                    if (useSelected == null)
+                    {
+                        UpdateStatus("Cancelled - nothing was changed in HRD.");
+                        return;
+                    }
+                    useSelectedStation = useSelected == true;
+                }
+
                 var report = await Task.Run(() =>
                 {
-                    var plan = HrdQsoFiller.Plan(read.qso, chosen, HrdPotaParks.Find, profile, clearQslVia);
+                    var plan = HrdQsoFiller.Plan(read.qso, chosen, HrdPotaParks.Find, profile, clearQslVia, useSelectedStation);
                     return HrdQsoFiller.Apply(window, plan);
                 });
                 int changed = report.Applied.Count(a => a.Took);
@@ -535,6 +549,28 @@ namespace CallsignLookup
         }
 
         private void UpdateStatus(string text) => lblStatus.Text = text;
+
+        // The QSO's My Station isn't the station selected under Working from (an old
+        // Penfield QSO opened while working from Home): asks which to keep. True for
+        // the selected station, false to keep what's in HRD, null to cancel.
+        private bool? ChooseStation(string call, string stationHere, HrdStationProfile selected)
+        {
+            var keep = new TaskDialogCommandLinkButton("Keep what's in HRD", $"{stationHere} - My Station is left as it is");
+            var use = new TaskDialogCommandLinkButton("Use the selected station",
+                $"{selected.DisplayName} - replaces this QSO's My Station");
+            var page = new TaskDialogPage
+            {
+                Caption = "Which station?",
+                Heading = $"{call}: its My Station isn't the one selected",
+                Text = $"This QSO's My Station is {stationHere}, but \"Working from\" is {selected.DisplayName}. " +
+                       "Which should it have?",
+                Icon = TaskDialogIcon.Warning,
+                AllowCancel = true,
+                Buttons = { keep, use, TaskDialogButton.Cancel },
+            };
+            var result = TaskDialog.ShowDialog(this, page);
+            return result == use ? true : result == keep ? false : null;
+        }
 
         // QRZ's location is in another state than its record says (W7F: Maricopa
         // County, AZ, for a Tacoma, WA station): asks which to use. True for the

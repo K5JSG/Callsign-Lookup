@@ -22,8 +22,32 @@ namespace CallsignLookup.Services.Hrd
         public string AlternativeLocationText { get; init; } = "";
         public bool UseAlternative { get; set; }
 
-        // What would be written.
-        public HrdRowChanges? Active => UseAlternative && AlternativeChanges != null ? AlternativeChanges : Changes;
+        // The same with the selected My Station applied over the QSO's own, when
+        // the QSO has a different station (an old Penfield QSO, Home selected):
+        // Changes / AlternativeChanges keep what's in HRD, these replace it. The
+        // user picks. Null when the stations match.
+        public HrdRowChanges? StationChanges { get; init; }
+        public HrdRowChanges? StationAlternativeChanges { get; init; }
+        public string StationHereText { get; init; } = "";
+        public string StationSelectedText { get; init; } = "";
+        public bool UseSelectedStation { get; set; }
+
+        public bool HasLocationChoice => AlternativeChanges != null;
+        public bool HasStationChoice => StationChanges != null;
+
+        // What would be written: the two choices (location, station) pick one of
+        // the four plans worked out in advance.
+        public HrdRowChanges? Active
+        {
+            get
+            {
+                bool address = UseAlternative && HasLocationChoice, station = UseSelectedStation && HasStationChoice;
+                if (address && station) return StationAlternativeChanges ?? StationChanges ?? AlternativeChanges ?? Changes;
+                if (station) return StationChanges ?? Changes;
+                if (address) return AlternativeChanges ?? Changes;
+                return Changes;
+            }
+        }
 
         // Ticked in the preview to start with: it has changes and QRZ's record
         // is for this callsign. One whose QRZ record is for another callsign
@@ -131,17 +155,35 @@ namespace CallsignLookup.Services.Hrd
 
                 // QRZ's location is in another state than its record: also work out the
                 // address's location, for the user to choose between.
+                var fields = HrdRowMapper.ToQsoFields(row);
                 HrdRowChanges? alternative = null;
                 var other = await AddressLocator.FindAlternativeAsync(result, Text(row, "COL_ADDRESS"), geocoder, cancellationToken);
                 if (other != null)
                 {
-                    var otherPlan = HrdQsoFiller.Plan(HrdRowMapper.ToQsoFields(row), other, HrdPotaParks.Find, profile, clearQslVia);
+                    var otherPlan = HrdQsoFiller.Plan(fields, other, HrdPotaParks.Find, profile, clearQslVia);
                     alternative = HrdRowMapper.ToColumnUpdates(otherPlan, row, Continent);
+                }
+
+                // The QSO's My Station is a different station than the selected one: also
+                // work out what using the selected one would do.
+                string? stationHere = HrdQsoFiller.StationMismatch(fields, profile);
+                HrdRowChanges? withStation = null, alternativeWithStation = null;
+                if (stationHere != null)
+                {
+                    withStation = HrdRowMapper.ToColumnUpdates(
+                        HrdQsoFiller.Plan(fields, result, HrdPotaParks.Find, profile, clearQslVia, useSelectedStation: true), row, Continent);
+                    if (other != null)
+                        alternativeWithStation = HrdRowMapper.ToColumnUpdates(
+                            HrdQsoFiller.Plan(fields, other, HrdPotaParks.Find, profile, clearQslVia, useSelectedStation: true), row, Continent);
                 }
                 items.Add(new HrdBatchItem
                 {
                     Pk = pk, Call = call, When = when, Changes = changes,
                     AlternativeChanges = alternative,
+                    StationChanges = withStation,
+                    StationAlternativeChanges = alternativeWithStation,
+                    StationHereText = stationHere ?? "",
+                    StationSelectedText = profile?.DisplayName ?? "",
                     QrzLocationText = AddressLocator.Describe(result),
                     AlternativeLocationText = other != null ? AddressLocator.Describe(other) : "",
                     TickedAtStart = changes.Any && HrdQsoFiller.SameStation(call, result.Qrz.Call),

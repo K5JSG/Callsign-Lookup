@@ -469,6 +469,68 @@ namespace CallsignLookup.Tests
             Assert.Contains(plan.Warnings, w => w.Contains("doesn't match") && w.Contains("Home - K5JSG"));
         }
 
+        private static Dictionary<string, string> PenfieldQso()
+        {
+            var qso = W5erxQso();
+            qso["edtMY_GRIDSQUARE"] = "FN13gd"; qso["edtMY_LAT"] = "43.133482"; qso["edtMY_LON"] = "-77.44069";
+            qso["edtMY_CITY"] = "Penfield"; qso["edtSTATION_CALLSIGN"] = "K5JSG";
+            return qso;
+        }
+
+        [Fact]
+        public void MyStation_UsingTheSelectedStationOverADifferentOne_IsTheUsersChoice()
+        {
+            var lookup = CallsignLookupService.Resolve(W5erx());
+
+            var keep = HrdQsoFiller.Plan(PenfieldQso(), lookup, FindPark, HomeProfile);
+            Assert.Null(keep.Profile);
+            Assert.Contains(keep.Warnings, w => w.Contains("left as it is"));
+
+            var use = HrdQsoFiller.Plan(PenfieldQso(), lookup, FindPark, HomeProfile, useSelectedStation: true);
+            Assert.Equal(HomeProfile, use.Profile);
+            Assert.Contains(use.Warnings, w => w.Contains("replaced by the selected station, as you chose"));
+        }
+
+        [Fact]
+        public void StationMismatch_SaysHowTheQsoReadsWhenItsAnotherStation()
+        {
+            Assert.Equal("Penfield FN13gd", HrdQsoFiller.StationMismatch(PenfieldQso(), HomeProfile));
+            Assert.Null(HrdQsoFiller.StationMismatch(PenfieldQso(), null));
+
+            var home = PenfieldQso();
+            home["edtMY_GRIDSQUARE"] = "FN13ah"; home["edtMY_LAT"] = "43.31545"; home["edtMY_LON"] = "-77.937824";
+            Assert.Null(HrdQsoFiller.StationMismatch(home, HomeProfile));
+        }
+
+        [Fact]
+        public void BatchItem_Active_FollowsBothChoices()
+        {
+            HrdRowChanges Plan(string label)
+            {
+                var c = new HrdRowChanges();
+                c.Changes.Add(new HrdColumnChange(label, "COL_X", "", label));
+                return c;
+            }
+            var item = new HrdBatchItem
+            {
+                Pk = 1, Changes = Plan("plain"), AlternativeChanges = Plan("address"),
+                StationChanges = Plan("station"), StationAlternativeChanges = Plan("both"),
+            };
+            string Now() => (string)item.Active!.Changes[0].New!;
+
+            Assert.Equal("plain", Now());
+            item.UseAlternative = true;
+            Assert.Equal("address", Now());
+            item.UseSelectedStation = true;
+            Assert.Equal("both", Now());
+            item.UseAlternative = false;
+            Assert.Equal("station", Now());
+
+            // A choice a QSO doesn't have does nothing.
+            var simple = new HrdBatchItem { Pk = 2, Changes = Plan("plain"), UseAlternative = true, UseSelectedStation = true };
+            Assert.Equal("plain", (string)simple.Active!.Changes[0].New!);
+        }
+
         [Fact]
         public void MyStation_NotThereYet_OrProfileHasNoPosition_IsApplied()
         {
