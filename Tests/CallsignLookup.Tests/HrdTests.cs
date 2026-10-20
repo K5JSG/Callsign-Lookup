@@ -469,6 +469,23 @@ namespace CallsignLookup.Tests
             Assert.Contains(plan.Warnings, w => w.Contains("doesn't match") && w.Contains("Home - K5JSG"));
         }
 
+        [Theory]
+        [InlineData("AF-023 - Sao Tome Island", "AF-023", true)]
+        [InlineData("AF-023", "AF-023", true)]
+        [InlineData("AF -023 - Sao Tome Island", "AF-023", true)]       // spacing typed in by hand
+        [InlineData("AF- 023 - Sao Tome Island", "AF-023", true)]
+        [InlineData("AF–023 – Sao Tome Island", "AF-023", true)]   // en dashes
+        [InlineData("af-023 - sao tome island", "AF-023", true)]
+        [InlineData("384 - Sao Tome", "384", true)]
+        [InlineData("384 -Sao Tome", "384", true)]
+        [InlineData("-none-", "AF-023", false)]
+        [InlineData("", "AF-023", false)]
+        [InlineData("AF-0231 - Other", "AF-023", false)]               // a longer number isn't the same
+        [InlineData("AF-024 - Other", "AF-023", false)]
+        [InlineData("3840 - Other", "384", false)]
+        public void SameEntry_IgnoresSpacingAndKindOfDash(string entry, string typed, bool same) =>
+            Assert.Equal(same, HrdQsoFiller.SameEntry(entry, typed));
+
         private static Dictionary<string, string> PenfieldQso()
         {
             var qso = W5erxQso();

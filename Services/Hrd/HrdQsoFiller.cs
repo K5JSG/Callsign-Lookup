@@ -461,10 +461,20 @@ namespace CallsignLookup.Services.Hrd
                 .Equals(string.Join(' ', b.Split(' ', StringSplitOptions.RemoveEmptyEntries)), StringComparison.OrdinalIgnoreCase);
 
         // A drop-down entry is "4766 - Key West" or "NA-062 - Florida State
-        // (Florida Keys) group"; what's typed is the part before " - ".
-        internal static bool SameEntry(string entry, string typed) =>
-            entry.Equals(typed, StringComparison.OrdinalIgnoreCase) ||
-            entry.StartsWith(typed + " ", StringComparison.OrdinalIgnoreCase);
+        // (Florida Keys) group"; what's typed is the part before " - ". Spacing
+        // around a dash and the kind of dash don't matter ("AF-023 - Sao Tome",
+        // "AF -023", "AF- 023" and an en dash are all the same entry) - lists that
+        // were typed in by hand differ in just that.
+        internal static bool SameEntry(string entry, string typed)
+        {
+            string e = NormalizeEntry(entry), t = NormalizeEntry(typed);
+            return e.Equals(t, StringComparison.OrdinalIgnoreCase) ||
+                   e.StartsWith(t + "-", StringComparison.OrdinalIgnoreCase) ||
+                   e.StartsWith(t + " ", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeEntry(string text) =>
+            System.Text.RegularExpressions.Regex.Replace(text.Trim(), @"\s*[-‐-―−]\s*", "-");
 
         // ---- applying ---------------------------------------------------------
 
@@ -545,12 +555,29 @@ namespace CallsignLookup.Services.Hrd
                             window.SetChecked(change.WriteId, true);
                             break;
                     }
-                    string actual = change.How == HrdSetBy.Check
+                    string ReadNow() => change.How == HrdSetBy.Check
                         ? window.ReadChecked(change.ReadId) == true ? "Yes" : "No"
                         : window.Read(change.ReadId) ?? "";
-                    bool took = change.How == HrdSetBy.Text
-                        ? SameText(actual, change.New) || SameNumber(actual, change.New)
-                        : SameEntry(actual, change.Typed);
+                    bool Took(string value) => change.How == HrdSetBy.Text
+                        ? SameText(value, change.New) || SameNumber(value, change.New)
+                        : SameEntry(value, change.Typed);
+
+                    string actual = ReadNow();
+                    bool took = Took(actual);
+
+                    // HRD's long lists (the IOTA reference, its island) can take a moment
+                    // to show what was chosen - and may rebuild the control when they do -
+                    // so look again, from fresh, before calling it a failure.
+                    if (!took && change.How is HrdSetBy.DropDown or HrdSetBy.TypeInList)
+                    {
+                        for (int wait = 0; wait < 6 && !took; wait++)
+                        {
+                            Thread.Sleep(500);
+                            window.ForgetControls();
+                            actual = ReadNow();
+                            took = Took(actual);
+                        }
+                    }
                     report.Applied.Add(new HrdAppliedChange(change, actual, took));
                     if (!took) report.Problems.Add($"{change.Label}: HRD didn't take \"{change.New}\" (it shows \"{actual}\") - set it by hand.");
                 }

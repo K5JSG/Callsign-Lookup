@@ -157,6 +157,11 @@ namespace CallsignLookup.Services.Hrd
 
         private void Refresh() => _controls = null;
 
+        // Drops the controls found so far, so the next read finds them again: HRD
+        // sometimes rebuilds a control (an island list after the IOTA reference
+        // changes), leaving the one found earlier reading stale.
+        public void ForgetControls() => Refresh();
+
         public bool Has(string id) => Control(id) != null;
 
         // Null when the field isn't on the tab that's showing.
