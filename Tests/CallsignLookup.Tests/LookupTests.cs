@@ -238,6 +238,37 @@ namespace CallsignLookup.Tests
             Assert.Equal("EM12kv", withGrid.GridSquare);
         }
 
+        [Theory]
+        [InlineData("JJ00aa", null, null)]                  // W6Z as QRZ has it: grid only
+        [InlineData("JJ00aa", 0.020833, 0.041667)]          // ... or with the grid centre's lat/long
+        [InlineData("JJ00", 0.0, 0.0)]
+        public void Resolve_NullIslandPlaceholder_IsNoLocation(string grid, double? lat, double? lon)
+        {
+            // W6Z (Route 66 On The Air, a rover; Stockton CA address) - the JJ00 square is
+            // open ocean, so this is "no location", and the address is tried next.
+            var record = new QrzCallsignRecord
+            {
+                Call = "W6Z", Grid = grid, Latitude = lat, Longitude = lon,
+                Country = "United States", State = "CA", Dxcc = 291,
+            };
+            var result = CallsignLookupService.Resolve(record);
+
+            Assert.Null(result.Latitude);
+            Assert.Equal("", result.GridSquare);
+            Assert.Null(result.CqZone);
+            Assert.Null(result.ItuZone);
+            Assert.Null(result.ArrlSection);
+        }
+
+        [Fact]
+        public void IsPlaceholderLocation_RealLocationsNearZeroAreNot()
+        {
+            Assert.True(CallsignLookupService.IsPlaceholderLocation(0.020833, 0.041667));
+            Assert.False(CallsignLookupService.IsPlaceholderLocation(37.9577, -121.2908));   // Stockton, CA
+            Assert.False(CallsignLookupService.IsPlaceholderLocation(0.3365, 6.7273));       // Sao Tome (land, 6.7E)
+            Assert.False(CallsignLookupService.IsPlaceholderLocation(-1.2921, 36.8219));     // Nairobi
+        }
+
         [Fact]
         public void Resolve_Canada_UsesProvince_NoCounty()
         {

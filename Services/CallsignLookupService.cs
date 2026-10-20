@@ -87,7 +87,7 @@ namespace CallsignLookup.Services
             // A QRZ record with nowhere real to put it (W7I's is grid AA00aa, at
             // the South Pole) is a record with no location, not one there.
             if (lat.HasValue && lon.HasValue && IsPlaceholderLocation(lat.Value, lon.Value)) lat = lon = null;
-            bool usableGrid = !record.Grid.StartsWith("AA00", StringComparison.OrdinalIgnoreCase);
+            bool usableGrid = !IsPlaceholderGrid(record.Grid);
 
             if (lat.HasValue && lon.HasValue)
             {
@@ -114,10 +114,19 @@ namespace CallsignLookup.Services
             return Resolve(record, lat.Value, lon.Value, source, Maidenhead.ToGridSquare(lat.Value, lon.Value), qrzHadLocation: true);
         }
 
-        // 0,0 ("null island") and the AA00 grid square at the South Pole - what
-        // QRZ and loggers put when there's no real location.
+        // 0,0 ("null island"), the JJ00 grid square around it (open ocean off West
+        // Africa - W6Z's QRZ record has JJ00aa, whose centre is 0.0208,0.0417, not
+        // exactly 0,0) and the AA00 grid square at the South Pole - what QRZ and
+        // loggers put when there's no real location.
         internal static bool IsPlaceholderLocation(double lat, double lon) =>
-            (lat == 0 && lon == 0) || (lat <= -89 && lon <= -178);
+            (Math.Abs(lat) < 0.01 && Math.Abs(lon) < 0.01) ||
+            (lat is >= 0 and < 1 && lon is >= 0 and < 2) ||
+            (lat <= -89 && lon <= -178);
+
+        // The same, as a grid square: AA00xx (South Pole) or JJ00xx (null island).
+        internal static bool IsPlaceholderGrid(string grid) =>
+            grid.StartsWith("AA00", StringComparison.OrdinalIgnoreCase) ||
+            grid.StartsWith("JJ00", StringComparison.OrdinalIgnoreCase);
 
         // The same, but from a grid square the user typed in place of the
         // QRZ record's location (FW1P: the record's grid is on Futuna, the
