@@ -149,7 +149,10 @@ namespace CallsignLookup.Services.Hrd
 
                 // QRZ has no location for this station: the QSO's address in the log (which
                 // the user can correct in HRD) locates it instead.
-                result = await AddressLocator.UseAddressAsync(result, Text(row, "COL_ADDRESS"), geocoder, cancellationToken);
+                // (Not for a portable call operating from another entity - ZF/KN2P.)
+                bool away = HrdQsoFiller.OperatingElsewhere(HrdRowMapper.ToQsoFields(row), result) != null;
+                if (!away)
+                    result = await AddressLocator.UseAddressAsync(result, Text(row, "COL_ADDRESS"), geocoder, cancellationToken);
                 var plan = HrdQsoFiller.Plan(HrdRowMapper.ToQsoFields(row), result, HrdPotaParks.Find, profile, clearQslVia);
                 var changes = HrdRowMapper.ToColumnUpdates(plan, row, Continent);
 
@@ -157,7 +160,7 @@ namespace CallsignLookup.Services.Hrd
                 // address's location, for the user to choose between.
                 var fields = HrdRowMapper.ToQsoFields(row);
                 HrdRowChanges? alternative = null;
-                var other = await AddressLocator.FindAlternativeAsync(result, Text(row, "COL_ADDRESS"), geocoder, cancellationToken);
+                var other = away ? null : await AddressLocator.FindAlternativeAsync(result, Text(row, "COL_ADDRESS"), geocoder, cancellationToken);
                 if (other != null)
                 {
                     var otherPlan = HrdQsoFiller.Plan(fields, other, HrdPotaParks.Find, profile, clearQslVia);

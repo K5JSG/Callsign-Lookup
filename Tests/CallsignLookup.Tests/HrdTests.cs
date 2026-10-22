@@ -486,6 +486,63 @@ namespace CallsignLookup.Tests
         public void SameEntry_IgnoresSpacingAndKindOfDash(string entry, string typed, bool same) =>
             Assert.Equal(same, HrdQsoFiller.SameEntry(entry, typed));
 
+        // ZF/KN2P: HRD set the Country from the ZF/ prefix (Cayman Islands, DXCC 69)
+        // and its own location, zones and distance. QRZ's record is for KN2P at home.
+        private static Dictionary<string, string> CaymanQso()
+        {
+            var qso = W5erxQso();
+            qso["edtCALL"] = "ZF/W5ERX";
+            qso["cbxCOUNTRY"] = "Cayman Islands";
+            qso["edtLAT"] = "19.5444"; qso["edtLON"] = "-80.55"; qso["edtGRIDSQUARE"] = "EK99";
+            qso["edtCQZ"] = "8"; qso["edtITUZ"] = "11"; qso["edtSTATE"] = ""; qso["edtCNTY"] = ""; qso["cbxARRLSECT"] = "";
+            qso["memCOMMENT"] = "";
+            return qso;
+        }
+
+        [Fact]
+        public void PortablePrefixInAnotherEntity_KeepsHrdsLocation_AndSaysSo()
+        {
+            var plan = HrdQsoFiller.Plan(CaymanQso(), CallsignLookupService.Resolve(W5erx()), FindPark, HomeProfile);
+
+            Assert.Equal("Cayman Islands", HrdQsoFiller.OperatingElsewhere(CaymanQso(), CallsignLookupService.Resolve(W5erx())));
+            var touched = Changes(plan).Keys.ToHashSet();
+            foreach (string label in new[] { "Latitude", "Longitude", "Grid Square", "CQ Zone", "ITU Zone", "State", "US County", "ARRL Section" })
+                Assert.DoesNotContain(label, touched);
+            Assert.Contains(plan.Warnings, w => w.Contains("operating from Cayman Islands") && w.Contains("left as HRD has them"));
+        }
+
+        [Fact]
+        public void PortablePrefixInAnotherEntity_WithOneIotaGroup_GetsThatGroup_ButNoIsland()
+        {
+            // HRD's position for Cayman (its centre) is at sea, so no island matches - but the
+            // entity's only IOTA group is NA-016.
+            var plan = HrdQsoFiller.Plan(CaymanQso(), CallsignLookupService.Resolve(W5erx()), FindPark, HomeProfile);
+            var changes = Changes(plan);
+
+            Assert.True(changes.TryGetValue("IOTA Ref", out string? reference), "no IOTA change planned");
+            Assert.StartsWith("NA-016", reference);
+            Assert.False(changes.ContainsKey("IOTA Island"));
+            Assert.Contains(plan.Warnings, w => w.Contains("set the island by hand"));
+
+            // An IOTA HRD already has isn't touched.
+            var already = CaymanQso();
+            already["edtIOTARefNo"] = "NA-016 - Cayman Islands";
+            Assert.False(Changes(HrdQsoFiller.Plan(already, CallsignLookupService.Resolve(W5erx()), FindPark, HomeProfile)).ContainsKey("IOTA Ref"));
+        }
+
+        [Theory]
+        [InlineData("W5ERX/P", "United States")]     // same entity as the QRZ home
+        [InlineData("W5ERX", "Cayman Islands")]      // no prefix or suffix part
+        [InlineData("ZF/W5ERX", "")]                 // HRD has no Country
+        public void OperatingElsewhere_OnlyForAPortableCallInAnotherEntity(string call, string country)
+        {
+            var qso = CaymanQso();
+            qso["edtCALL"] = call;
+            qso["cbxCOUNTRY"] = country;
+
+            Assert.Null(HrdQsoFiller.OperatingElsewhere(qso, CallsignLookupService.Resolve(W5erx())));
+        }
+
         private static Dictionary<string, string> PenfieldQso()
         {
             var qso = W5erxQso();

@@ -481,10 +481,13 @@ namespace CallsignLookup
                     string address = qso.GetValueOrDefault("memoADDRESS", "");
                     // A station QRZ has no location for: the address in HRD's Address
                     // box (which the user can correct) locates it instead.
-                    var located = await AddressLocator.UseAddressAsync(lookup, address, _geocoder);
+                    // (Not for a portable call operating from another entity - ZF/KN2P:
+                    // the home location and address aren't where it is.)
+                    bool away = HrdQsoFiller.OperatingElsewhere(qso, lookup) != null;
+                    var located = away ? lookup : await AddressLocator.UseAddressAsync(lookup, address, _geocoder);
                     // QRZ's location is in another state than its record: the address
                     // gives the other choice.
-                    var other = await AddressLocator.FindAlternativeAsync(located, address, _geocoder);
+                    var other = away ? null : await AddressLocator.FindAlternativeAsync(located, address, _geocoder);
                     return (qso, located, other);
                 });
 

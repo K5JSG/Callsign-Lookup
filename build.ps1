@@ -20,7 +20,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Version = "1.11.2",
+    [string]$Version = "1.11.3",
     [switch]$SkipInstaller
 )
 

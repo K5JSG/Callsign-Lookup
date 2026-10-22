@@ -236,10 +236,18 @@ namespace CallsignLookup.Services.Hrd
             // park's DXCC entity and state/province - not QRZ's home ones -
             // decide the county, section and IOTA.
             LookupResult located = lookup;
+            string? elsewhere = park == null ? OperatingElsewhere(qso, lookup) : null;
             if (park != null)
             {
                 located = CallsignLookupService.ResolveAt(record.At(park.Dxcc, park.State),
                     park.Latitude, park.Longitude, $"POTA park {park.Reference}");
+            }
+            else if (elsewhere != null)
+            {
+                // ZF/KN2P: in the Cayman Islands, not at KN2P's home in Colorado.
+                plan.Warnings.Add($"{Get("edtCALL")} is operating from {elsewhere}, not at home in " +
+                                  $"{(record.Land.Length > 0 ? record.Land : "DXCC " + record.Dxcc)} - location, grid, zones, state, " +
+                                  $"county and section left as HRD has them (HRD's own for {elsewhere}).");
             }
             else if (lookup.Latitude == null)
             {
@@ -272,7 +280,7 @@ namespace CallsignLookup.Services.Hrd
                 if (located.ArrlSection == null && !HrdFieldChange.IsBlank(Get("cbxARRLSECT")))
                     plan.LeftoverChecks.Add(new HrdLeftoverCheck("cbxARRLSECT", "ARRL section", $"{park.Reference} isn't in one"));
             }
-            else
+            else if (elsewhere == null)
             {
                 if (record.IsUnitedStates || record.IsCanadian) state = record.State;
                 if (record.IsUnitedStates) county = record.County.Length > 0 ? record.County : lookup.County?.County ?? "";
@@ -302,7 +310,7 @@ namespace CallsignLookup.Services.Hrd
                 Change("US County", "Location", "edtCNTY", "cbxLocationCounty", HrdSetBy.DropDown, county, county);
             }
 
-            if (located.Latitude is double lat && located.Longitude is double lon)
+            if (elsewhere == null && located.Latitude is double lat && located.Longitude is double lon)
             {
                 if (!SameCoordinate(Get("edtLAT"), lat))
                     Change("Latitude", "Location", "edtLAT", "edtLAT", HrdSetBy.Text, Coordinate(lat));
@@ -323,6 +331,29 @@ namespace CallsignLookup.Services.Hrd
 
                 // 6. IOTA - only ever from the location.
                 PlanIota(plan, located.Iota, Get("edtIOTARefNo"), lat, lon, Change);
+            }
+            else if (elsewhere != null &&
+                     double.TryParse(Get("edtLAT"), NumberStyles.Float, CultureInfo.InvariantCulture, out double hrdLat) &&
+                     double.TryParse(Get("edtLON"), NumberStyles.Float, CultureInfo.InvariantCulture, out double hrdLon))
+            {
+                // Operating from another entity (ZF/KN2P): the QSO's own position - HRD's
+                // for that entity - decides the IOTA, not the QRZ home. QRZ's IOTA field
+                // is for the home, so it isn't used.
+                var onIsland = IotaService.Find(hrdLat, hrdLon, HrdCountries.Dxcc(elsewhere), "");
+                if (onIsland != null)
+                {
+                    PlanIota(plan, onIsland, Get("edtIOTARefNo"), hrdLat, hrdLon, Change);
+                }
+                else if (HrdFieldChange.IsBlank(Get("edtIOTARefNo")) &&
+                         IotaService.CandidateGroups(hrdLat, hrdLon, HrdCountries.Dxcc(elsewhere)) is [var only])
+                {
+                    // HRD's position for an entity is usually its centre, often out at sea
+                    // between the islands (Cayman), so no island matches. An entity with a
+                    // single IOTA group still gets that group, the island left for the user.
+                    Change("IOTA Ref", "IOTA", "edtIOTARefNo", "edtIOTARefNo", HrdSetBy.TypeInList, $"{only.Ref} - {only.Name}", only.Ref);
+                    plan.Warnings.Add($"HRD's position for {elsewhere} isn't on a known island, so only the IOTA group ({only.Ref}, " +
+                                      $"the entity's only one) is filled in - set the island by hand.");
+                }
             }
 
             // 4. QSL Manager/VIA - unless "Clear QSL via" is off, and never a
@@ -427,6 +458,20 @@ namespace CallsignLookup.Services.Hrd
         // that is the same station, and picking the profile is what puts the
         // exact position in. Null when it can't be told - the profile has no
         // position, or the QSO has no My Station yet.
+        // A portable call with a prefix (ZF/KN2P, KL4RL/VE9, KL4RL/W2): the station
+        // is operating from the prefix's entity, not at the home the QRZ record
+        // describes. HRD sets the QSO's Country from the prefix, so when that is a
+        // different DXCC entity than the QRZ record's, this is the Country name
+        // (null otherwise). The QRZ home location is then no use for the QSO.
+        public static string? OperatingElsewhere(IReadOnlyDictionary<string, string> qso, LookupResult lookup)
+        {
+            if (!qso.GetValueOrDefault("edtCALL", "").Contains('/')) return null;
+            string country = qso.GetValueOrDefault("cbxCOUNTRY", "");
+            if (HrdCountries.Dxcc(country) is not int hrdEntity || lookup.Qrz.Dxcc is not int homeEntity || hrdEntity == homeEntity)
+                return null;
+            return country;
+        }
+
         // How the QSO's My Station reads ("Penfield FN13gd") when it's a different
         // station than the selected profile; null when it's the same, can't be
         // told, or there's no profile.
