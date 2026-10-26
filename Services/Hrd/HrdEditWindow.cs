@@ -235,11 +235,12 @@ namespace CallsignLookup.Services.Hrd
         }
 
         // Empties a box by keyboard - for boxes that won't take an empty SetValue.
+        // Leaves it as it is if the box can't be given the focus: Ctrl+A, Delete
+        // would empty whatever box has it instead.
         public string? ClearByKeyboard(string id)
         {
             var e = Control(id) ?? throw new HrdException($"Can't find HRD's {id} box.");
-            e.SetFocus();
-            Thread.Sleep(200);
+            if (!FocusForTyping(e)) return Read(id);
             Keyboard.Press(Keyboard.Control, 'A');
             Keyboard.Press(Keyboard.Delete);
             Thread.Sleep(250);
@@ -251,8 +252,8 @@ namespace CallsignLookup.Services.Hrd
         public string? ChooseInDropDown(string id, string text, bool openFirst = true)
         {
             var e = Control(id) ?? throw new HrdException($"Can't find HRD's {id} list.");
-            e.SetFocus();
-            Thread.Sleep(200);
+            if (!FocusForTyping(e))
+                throw new HrdException($"Couldn't put the cursor in HRD's {id} list, so nothing was typed - set it by hand.");
             if (openFirst && e.TryGetCurrentPattern(ExpandCollapsePattern.Pattern, out object p))
             {
                 ((ExpandCollapsePattern)p).Expand();
@@ -264,6 +265,62 @@ namespace CallsignLookup.Services.Hrd
             Thread.Sleep(500);
             Refresh();
             return Read(id);
+        }
+
+        // Keys go wherever the focus really is, and UI Automation's SetFocus
+        // doesn't always get it to HRD's Qt lists: on CT9/DF7EE's IOTA tab it
+        // stayed on the island ID box (and in a test went to the Date box), so
+        // "AF-014", Enter was typed into the wrong box. So check the focus got
+        // there - if not, click the control as the user would - and only type
+        // once it has. False when it still hasn't: nothing must be typed then.
+        private static bool FocusForTyping(AutomationElement e)
+        {
+            e.SetFocus();
+            Thread.Sleep(200);
+            if (HasFocus(e)) return true;
+
+            var r = e.Current.BoundingRectangle;
+            if (r.IsEmpty || e.Current.IsOffscreen) return false;
+            int x = (int)(r.Left + r.Width / 2), y = (int)(r.Top + r.Height / 2);
+            // Only click HRD itself - not a window on top of it (Callsign Lookup
+            // with Stay on top, say).
+            if (Mouse.ProcessAt(x, y) != e.Current.ProcessId) return false;
+            Mouse.Click(x, y);
+            Thread.Sleep(300);
+
+            // Clicking a closed list opens it; close it again, keeping its choice.
+            try
+            {
+                if (e.TryGetCurrentPattern(ExpandCollapsePattern.Pattern, out object p) &&
+                    ((ExpandCollapsePattern)p).Current.ExpandCollapseState == ExpandCollapseState.Expanded)
+                {
+                    ((ExpandCollapsePattern)p).Collapse();
+                    Thread.Sleep(300);
+                }
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            return HasFocus(e);
+        }
+
+        // Whether the keyboard focus is on the control or inside it (an editable
+        // list's own text box).
+        private static bool HasFocus(AutomationElement e)
+        {
+            try
+            {
+                var focused = AutomationElement.FocusedElement;
+                for (int depth = 0; focused != null && depth < 4; depth++)
+                {
+                    if (Automation.Compare(focused, e)) return true;
+                    focused = TreeWalker.ControlViewWalker.GetParent(focused);
+                }
+            }
+            catch (ElementNotAvailableException)
+            {
+            }
+            return false;
         }
 
         public void Press(string id)
@@ -328,8 +385,57 @@ namespace CallsignLookup.Services.Hrd
             return values;
         }
 
-        // Typing into HRD: SendInput to whatever has the keyboard focus,
-        // which SetFocus has just made the HRD control.
+        // Clicking an HRD control when SetFocus can't reach it. The pointer is
+        // put back where it was afterwards.
+        private static class Mouse
+        {
+            private const uint LeftDown = 0x0002, LeftUp = 0x0004;
+
+            public static void Click(int x, int y)
+            {
+                GetCursorPos(out POINT before);
+                SetCursorPos(x, y);
+                Thread.Sleep(50);
+                mouse_event(LeftDown, 0, 0, 0, IntPtr.Zero);
+                mouse_event(LeftUp, 0, 0, 0, IntPtr.Zero);
+                Thread.Sleep(50);
+                SetCursorPos(before.X, before.Y);
+            }
+
+            // The process whose window is at that point on the screen.
+            public static int ProcessAt(int x, int y)
+            {
+                IntPtr window = WindowFromPoint(new POINT { X = x, Y = y });
+                if (window == IntPtr.Zero) return 0;
+                GetWindowThreadProcessId(window, out uint pid);
+                return (int)pid;
+            }
+
+            [StructLayout(LayoutKind.Sequential)]
+            private struct POINT
+            {
+                public int X;
+                public int Y;
+            }
+
+            [DllImport("user32.dll")]
+            private static extern bool GetCursorPos(out POINT point);
+
+            [DllImport("user32.dll")]
+            private static extern bool SetCursorPos(int x, int y);
+
+            [DllImport("user32.dll")]
+            private static extern void mouse_event(uint flags, int dx, int dy, int data, IntPtr extraInfo);
+
+            [DllImport("user32.dll")]
+            private static extern IntPtr WindowFromPoint(POINT point);
+
+            [DllImport("user32.dll")]
+            private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+        }
+
+        // Typing into HRD: SendInput to whatever has the keyboard focus, which
+        // FocusForTyping has just checked is the HRD control.
         private static class Keyboard
         {
             public const ushort Control = 0x11, Delete = 0x2E, Enter = 0x0D;

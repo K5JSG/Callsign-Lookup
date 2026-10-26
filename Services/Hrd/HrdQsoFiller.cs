@@ -445,11 +445,13 @@ namespace CallsignLookup.Services.Hrd
         // QRZ's record is for the callsign, or for the home call in a
         // portable one (KL4RL for KL4RL/VE9, VE9/KL4RL or KL4RL/P). QRZ's
         // record for a Silent Key is "WB2FAU/SK2023" (or /SK with some other
-        // ending) - still that station.
+        // ending) - still that station. QRZ can also list the portable call
+        // itself (CT9/DF7EE), which is the QSO's call exactly.
         public static bool SameStation(string call, string qrzCall)
         {
             qrzCall = Regex.Replace(qrzCall, @"/SK[^/]*$", "", RegexOptions.IgnoreCase);
-            return call.Split('/').Any(part => part.Equals(qrzCall, StringComparison.OrdinalIgnoreCase));
+            return call.Equals(qrzCall, StringComparison.OrdinalIgnoreCase) ||
+                   call.Split('/').Any(part => part.Equals(qrzCall, StringComparison.OrdinalIgnoreCase));
         }
 
         // Whether the QSO's My Station is the profile: same callsign, locator

@@ -236,6 +236,9 @@ namespace CallsignLookup.Tests
         [InlineData("W5ERX", "w5erx", true)]
         [InlineData("KL4RL/VE9", "VE9ABC", false)]
         [InlineData("N1ABC", "N1ABD", false)]
+        [InlineData("CT9/DF7EE", "CT9/DF7EE", true)]      // QRZ lists the portable call itself
+        [InlineData("CT9/DF7EE", "ct9/df7ee", true)]
+        [InlineData("CT9/DF7EE", "CT9/DL1ABC", false)]
         public void SameStation_HomeCallOfAPortableCall(string call, string qrzCall, bool same) =>
             Assert.Equal(same, HrdQsoFiller.SameStation(call, qrzCall));
 
