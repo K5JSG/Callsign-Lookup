@@ -23,25 +23,29 @@ Built by Jeremy S. Gaynor, K5JSG.
 If you log with [Ham Radio Deluxe](https://www.hamradiodeluxe.com/) Logbook, Callsign Lookup can do the per-QSO cleanup in HRD's log entry window for you.
 
 1. Open the QSO in HRD (Edit, or a new one in Add). Within a couple of seconds Callsign Lookup shows "*CALL* open" in its **HRD Logbook** row, puts the callsign in its box and looks it up. Opening another QSO, or changing or deleting the callsign in HRD, does the same.
-2. Do HRD's own Lookup as usual.
+2. The QSO has to be in the log already, so save a new one in HRD first. A park reference or a note you type into HRD's window before the next step is kept.
 3. Pick where you're operating from under **Working from**. These are HRD's My Station profiles (Tools > Configure > My Station). The choice is remembered.
-4. Click **Fill HRD QSO**, and leave HRD alone until the report appears. HRD's drop-down lists (Country, state, county, ARRL section, IOTA) are filled by typing into them, and only once the list really has the keyboard focus. If HRD won't give a list the focus, it's clicked, so you may see the pointer jump there and back. If it still won't take it, nothing is typed and the report asks you to set that one by hand. In order, it:
+4. Click **Fill HRD QSO**. It presses HRD's own **Lookup** and then **Update (F7)** for you, without taking the keyboard or the mouse, so you can carry on working. HRD saves the QSO and closes its window. Anything HRD's Lookup wiped or changed that should stay (a POTA reference, the IOTA reference and island, an SK note) is put back. Then Callsign Lookup reads the saved QSO from HRD's log and works out what to add on top. In order, it:
    - checks name, QTH, state and US county against QRZ (for a POTA QSO the state and county are the park's instead), and fills any that are blank or don't match (a name with HRD's quoted nickname, `WILLIAM "Bill" HAMALAINEN`, matches). A portable call (KL4RL/W2, VE3/KL4RL) is looked up as it is first; if QRZ has no page for it, the home call (the longest part, KL4RL) is looked up instead, and that counts as a match. If the call's prefix puts the station in another DXCC entity than that home (ZF/KN2P is in the Cayman Islands, not Colorado) and there's no park, QRZ's home location is no use. The location, grid, zones, state, county and section are then left as HRD has them (HRD sets them from the prefix), no location question is asked, and the report says so. The IOTA still comes from HRD's own position, and for an entity with a single IOTA group at sea or off the island data (Cayman) just the group is filled in and the island is left for you.
    - takes POTA park references out of the Comment (`US-3033`, `POTA: US-4579 & US-4566`) and puts them in the POTA field in place of whatever was there, with the park's name and location from HRD's own park list. Several parks go in as a comma list, like HRD's "Multiple POTAs"; the first park is the one entered, so the POTA tab and the QSO get its name and location. Only the park references come out, with a leading "POTA:" and the spaces (and any comma or dash joining them) around them; any other text in the Comment stays exactly as written (`Nice signal POTA: US-3033 73` becomes `Nice signal 73`). If something that looks like a park isn't in HRD's park list, the Comment and POTA field are left alone and the report says so;
    - for a POTA QSO, sets the Country to the park's DXCC entity (from HRD's park list), so a station working portable from another country (KL4RL/VE9, an Alaska call in a New Brunswick park) gets the park's country, state/province, zones and section rather than its QRZ home ones. The QTH stays the QRZ home one. A park outside the US and Canada clears the state; a US county or ARRL section still left in HRD after the fill is flagged in the report (HRD empties the county itself when the Country changes, so it usually isn't). HRD's country names (it calls 230 "Fed. Republic of Germany") come from `Data/hrdCountries.json`; for an entity not in it, the report asks you to check the Country by hand;
-   - re-selects the My Station profile, but only if the QSO's My Station is already that station (same callsign and locator, and the position either matches the profile's or is just the locator's centre, which is all WSJT-X logs) or has none yet. A QSO that has a different station, such as an old Penfield QSO opened while working from Home, is [your choice](#when-the-qsos-my-station-isnt-the-selected-one): the report warns, and you pick to keep what's in HRD (the default) or use the selected station;
+   - re-selects the My Station profile, but only if the QSO's My Station is already that station (same callsign and locator, and the position either matches the profile's or is just the locator's centre, which is all WSJT-X logs) or has none yet. A QSO that has a different station, such as an old Penfield QSO opened while working from Home, is [your choice](#when-the-qsos-my-station-isnt-the-selected-one): the report warns, and you pick to keep what's in HRD (the default) or use the selected station. A My County HRD already has is kept in whichever form HRD saved it (`NY,MONROE` or `Monroe`);
    - sets the QSO's location to the park (or, for no park, the QRZ location), and from that the grid square, CQ and ITU zones and ARRL section, worked out as in the main window. If QRZ has no usable location for the station (none, or a placeholder such as grid `AA00aa`, grid `JJ00aa` or lat/long 0,0, which special-event pages often carry), the address is used instead, see [Stations with no location on QRZ](#stations-with-no-location-on-qrz);
-   - clears the distance and presses HRD's Recalc (HRD measures grid square centre to grid square centre, from your My Station locator);
+   - works out the distance and bearing the way HRD's Recalc does (grid square centre to grid square centre, from your My Station locator)
    - clears QSL Manager/VIA, unless **Clear QSL via in HRD** (next to Stay on top, remembered) is unticked, in which case it's left alone. A Silent Key note in it (`SK March 28, 2025`, `SK2023`) is never cleared;
    - for a Silent Key (QRZ's record is `CALL/SK2023`, or `/SK` followed by anything), puts `SK 2023` in QSL Manager/VIA (ahead of any other note it keeps if Clear QSL via is off; an SK note already there is left) and ticks the Silent Key box on the Contact tab, whichever way Clear QSL via is set;
    - sets the IOTA reference and island if the location is on one.
-5. The report opens in front of the main window (even with Stay on top ticked), half an inch above it. It lists every field that had a different value (to verify), every blank field it filled in, the My Station fields the profile changed, notes, and anything HRD wouldn't take. Then:
-   - **Approve - Update in HRD** presses Update (F7) in HRD's window, saving the QSO;
-   - **Close** leaves the QSO open in HRD, unsaved, to finish there. Cancel in HRD throws the changes away.
+5. The report opens. Each row is a field: **Was** is what HRD saved, **Will become** is what Callsign Lookup would write. Every field it would change is listed first and ticked, then the main fields it leaves alone (name, QTH, country, state, county, grid, position, zones, section, IOTA, POTA, QSL via, comment), so you can correct any of them.
+   - Untick a row to leave that field as HRD has it.
+   - Click a **Will become** cell to type a different value. Country, ARRL section and IOTA island suggest values as you type. A value that can't be stored (a grid of the wrong length, a zone out of range, an IOTA or POTA reference in the wrong form, a country HRD doesn't know) turns red with the reason, and Approve stays off until it's fixed. An SK note can't be removed from the Comment or QSL via unless it's in the other one.
+   - Linked fields follow: a new grid moves the position to its centre and recalculates distance and bearing, a new position sets the grid, a new country sets the DXCC entity and continent, and a new IOTA reference empties the island.
+   - **Reset edits** puts the report back to what the fill worked out.
+6. Under the report, **My Station (HRD)** lists HRD's My Station profiles, starting on the one picked under **Working from**. Choosing another one works the QSO out again for that station (your typed changes go). **Send to LoTW** and **Send to QRZ** pick where the QSO goes once it's written (see [Sending to LoTW and QRZ](#sending-to-lotw-and-qrz)).
+7. **Approve** makes a backup of the log (`<log> backup <date time> before Callsign Lookup Fill HRD QSO.hrdsql`), writes the ticked fields straight into HRD's log, reads them back, sends the QSO, sets HRD's sent flags and asks HRD to reload. The summary says what was written and sent. HRD can't be told to reopen a QSO, so double-click it in HRD's log to check it. **Close** writes and sends nothing (HRD's own Lookup and Update have already been saved).
 
-Only blank fields and ones that don't match are changed; a location within about 100 m of the right one is left alone. If QRZ's page for the callsign is for a different callsign (a changed call, say), it asks before going on. A portable call's home call, QRZ's own page for the portable call (CT9/DF7EE) and a Silent Key's `/SK` suffix don't count as different. An IOTA reference in HRD for a group nowhere near the location is cleared; one whose area the location is in (it could be a small island the island data hasn't got) is only flagged.
+Only blank fields and ones that don't match are changed; a location within about 100 m of the right one is left alone. If QRZ's page for the callsign is for a different callsign (a changed call, say), the report warns, so check it before you approve. Fill selected starts such a QSO unticked. A portable call's home call, QRZ's own page for the portable call (CT9/DF7EE) and a Silent Key's `/SK` suffix don't count as different. An IOTA reference in HRD for a group nowhere near the location is cleared; one whose area the location is in (it could be a small island the island data hasn't got) is only flagged.
 
-Callsign Lookup fills HRD's window through Windows UI Automation, the same interface screen readers use, so HRD needs no add-ons or settings. It only reads the description, callsign, locator, position and the My Station values a profile copies into a QSO (city, street, rig and so on), not the passwords stored beside them. Tested with HRD Logbook 6.9.
+Callsign Lookup reads HRD's window and presses its buttons through Windows UI Automation, the same interface screen readers use, and writes the rest into HRD's log file, so HRD needs no add-ons or settings. It only reads the description, callsign, locator, position and the My Station values a profile copies into a QSO (city, street, rig and so on), not the passwords stored beside them. Tested with HRD Logbook 6.9.
 
 ### Stations with no location on QRZ
 
@@ -57,7 +61,7 @@ The address is the one in HRD's **Address** box on the Location tab, which you c
 
 Sometimes QRZ has a real location that is in another state than the one its own record lists. The Bigfoot special-event stations are the example: W7F's record says Tacoma, WA, but its lat/long is in Maricopa County, AZ. One of the two is wrong for your QSO, so the report warns (*"QRZ's location (DM33up - Maricopa County, AZ) is in another state than the one its record lists (WA) - check which is right"*) and you choose:
 
-- **Fill HRD QSO** asks before it touches HRD: **Use QRZ's location**, **Use the address's location** (found as above from the address in HRD's Address box), or Cancel.
+- **Fill HRD QSO** shows two tick boxes above the report: **QRZ's location** or the **address's location** (found as above from the address in HRD's Address box). One is always ticked.
 - **Fill selected...** gives each such QSO a **Location** column (`QRZ` or `address`) and two tick boxes in its detail pane, one of which is always ticked. **Address location for all** and **QRZ location for all** set every such QSO at once. A QSO with nothing left to write once you've chosen is unticked.
 
 QRZ's location is the default. US stations only.
@@ -66,7 +70,7 @@ QRZ's location is the default. US stations only.
 
 A QSO that already has a My Station different from the profile picked under **Working from** (an old Penfield QSO while Home is selected, say) isn't silently changed or silently skipped: the report warns (*"This QSO's My Station (Penfield FN13gd) doesn't match the selected "Home - K5JSG""*) and you choose.
 
-- **Fill HRD QSO** asks before it touches HRD: **Keep what's in HRD** or **Use the selected station**, or Cancel.
+- **Fill HRD QSO** shows two tick boxes above the report: **Keep what's in HRD** or the **selected station**. One is always ticked.
 - **Fill selected...** gives each such QSO a **Station** column (`HRD's` or `selected`) and two tick boxes in its detail pane, one always ticked. **Selected station for all** and **HRD's station for all** set every such QSO at once. This works alongside the location choice above.
 
 Keeping what's in HRD is the default. A QSO whose position is only the locator's centre (as WSJT-X logs it) counts as the same station, so it just gets the exact position.
@@ -77,11 +81,26 @@ Keeping what's in HRD is the default. A QSO whose position is only the locator's
 
 1. In HRD Logbook, select the QSOs in the log and press **Ctrl+C**, then click **Fill selected...**.
 2. A warning says this changes HRD's log file directly, and asks you to make sure no Add/Edit window is open (one saved later would undo the changes). If one is open, it offers to close it without saving.
-3. Each callsign is looked up on QRZ and the same rules as above are applied (including **Working from** and **Clear QSL via in HRD**). The preview lists every QSO with what would change; click one to see old and new values field by field. QSOs with nothing to change, or where QRZ's record is for another callsign, start unticked or greyed. Where QRZ's location and its own state disagree, you [choose which location is used](#when-qrzs-location-and-its-state-disagree), and where a QSO's My Station isn't the selected one, [which station](#when-the-qsos-my-station-isnt-the-selected-one).
-4. **Apply** writes the ticked QSOs. First it checks nothing has changed in HRD since the preview, makes a backup of the log beside it (`<log> backup <date time> before Callsign Lookup batch fill.hrdsql`; the last 10 of these are kept), writes everything in one transaction (all or nothing), reads it back, and asks HRD to reload through its IP Client port. A summary shows what changed and can be copied.
+3. Each callsign is looked up on QRZ and the same rules as above are applied (including **Working from** and **Clear QSL via in HRD**). The preview lists every QSO with what would change; click one to see old and new values field by field, in the same editable report as the single fill (untick a field, or click **Will become** to change it). QSOs with nothing to change, or where QRZ's record is for another callsign, start unticked or greyed. Where QRZ's location and its own state disagree, you [choose which location is used](#when-qrzs-location-and-its-state-disagree), and where a QSO's My Station isn't the selected one, [which station](#when-the-qsos-my-station-isnt-the-selected-one).
+4. **Apply** writes the ticked QSOs. First it checks nothing has changed in HRD since the preview, makes a backup of the log beside it (`<log> backup <date time> before Callsign Lookup batch fill.hrdsql`. The last 10 backups of both kinds together are kept), writes everything in one transaction (all or nothing), reads it back, sends the QSOs to LoTW and QRZ if those are ticked under the report, and asks HRD to reload through its IP Client port. A summary shows what changed and what was sent, and can be copied.
 5. **Undo this batch** puts every changed field back as it was (a backup is made first), unless a QSO has been changed since.
 
 This writes into HRD's SQLite log directly, because HRD's log list can't be driven through UI Automation. It uses the same planning code as the single fill, so the results match what HRD's own Update saves.
+
+## Sending to LoTW and QRZ
+
+Both fills can send the QSOs they write, in the background, with no TQSL or browser window. Only the QSOs being filled are sent, never the rest of the log, and the settings come from HRD, so there's nothing to set up in Callsign Lookup.
+
+| | LoTW | QRZ logbook |
+|---|---|---|
+| How | HRD's own TQSL (the one set in HRD's LoTW options), signing with your certificate | QRZ's logbook API, one QSO at a time, replacing any copy already there |
+| Key or location | A **TQSL location** drop-down per My Station, listing every station location TQSL has on this PC | The QRZ API key HRD has for the QSO's station callsign |
+| Ticked to start with | Only if a QSO isn't marked as sent to LoTW yet | Always, when HRD has a key |
+| After it's sent | HRD's LoTW sent flag, date and "Upload OK." status | HRD's QRZ sent flag, date and QRZ's reply |
+
+The TQSL location is picked for you when it's clear: the location HRD last used for that callsign, if its callsign and grid fit the QSO's My Station, or else the one location whose callsign and grid fit (a park reference in a location's name settles a tie). If none fits, nothing is picked and Approve stays off until you choose one, so a QSO is never signed with the wrong location.
+
+If your certificate has a password, Callsign Lookup asks for it in its own box when TQSL needs it. It's used for that send only and never saved. **Skip LoTW** leaves those QSOs unsent, and HRD's own upload can send them later. TQSL's "already on LoTW" answer counts as sent. A send that fails leaves HRD's flags alone and the summary says why. The API key and password are never shown, logged or saved by Callsign Lookup.
 
 ## How it works
 
@@ -127,12 +146,16 @@ This publishes a self-contained, single-file executable plus its `Data` folder t
 
 | Path | What it is |
 |------|------------|
-| `MainForm.cs`, `QrzLoginForm.cs`, `HrdFillReportForm.cs`, `BatchFillForm.cs` | The WinForms UI (the last is the batch preview and summary) |
-| `Services/Hrd/HrdQsoFiller.cs` | Works out what an HRD QSO needs and fills it in, in the order above |
+| `MainForm.cs`, `QrzLoginForm.cs`, `BatchFillForm.cs` | The WinForms UI (the last is the fill report, for one QSO or a batch, and its summary) |
+| `QsoEditGrid.cs`, `LotwPasswordForm.cs` | The editable report grid, and the box that asks for the LoTW certificate password |
+| `Services/Hrd/HrdQsoFiller.cs` | Works out what an HRD QSO needs, in the order above |
 | `Services/Hrd/HrdEditWindow.cs` | Reads and fills HRD Logbook's log entry window through UI Automation |
 | `Services/Hrd/HrdPotaParks.cs`, `HrdStationProfiles.cs` | HRD's POTA park list and My Station profiles |
 | `Services/Hrd/HrdCountries.cs` | HRD's name for each DXCC entity, for its Country box |
 | `Services/Hrd/HrdLogDatabase.cs`, `HrdRowMapper.cs`, `HrdBatchFiller.cs`, `HrdClipboard.cs` | The batch fill: HRD's SQLite log (read, backup, write, refresh), turning a log row into the planner's input and its changes back into columns, the preview/apply/undo, and reading the Ctrl+C selection |
+| `Services/Hrd/HrdQsoEdits.cs` | Checks and applies values typed into the report, and what HRD's Lookup must not wipe |
+| `Services/Hrd/HrdUploadSettings.cs`, `HrdUploadFlags.cs` | HRD's QRZ key, LoTW location and TQSL path, and the sent flags HRD sets |
+| `Services/Upload/` | The LoTW (TQSL) and QRZ logbook sends, and the ADIF they're made from |
 | `Services/GeocodingService.cs`, `AddressLocator.cs` | Nominatim address search, and working out a location from an address for stations QRZ has none for |
 | `AppLogo.cs`, `logo.ico`, `logo-256.png` | Program icon and window logo, built into the exe (`Logo.png` is the full-size source artwork) |
 | `Services/QrzService.cs` | QRZ XML client: login, session key reuse, re-login on timeout |

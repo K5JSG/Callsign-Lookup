@@ -16,6 +16,10 @@ namespace CallsignLookup.Services.Hrd
         // Null for an entity not in the file.
         public static string? Name(int dxcc) => Names.Value.TryGetValue(dxcc, out string? name) ? name : null;
 
+        // Every name, A to Z (the report's Country suggestions).
+        public static IReadOnlyList<string> All() =>
+            Names.Value.Values.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
+
         // The DXCC number for HRD's name for it (as in its Country box); null
         // when the name isn't in the file.
         public static int? Dxcc(string name) =>

@@ -3,7 +3,11 @@ using System.Globalization;
 namespace CallsignLookup.Services.Hrd
 {
     // One column of one QSO changing. Label is what the preview calls it.
-    public sealed record HrdColumnChange(string Label, string Column, object? Old, object? New);
+    public sealed record HrdColumnChange(string Label, string Column, object? Old, object? New)
+    {
+        // How close a number must be to count as the same (distance 0.01 km...).
+        public double Tolerance { get; init; } = 1e-6;
+    }
 
     public sealed class HrdRowChanges
     {
@@ -224,11 +228,35 @@ namespace CallsignLookup.Services.Hrd
                     'D' => double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double d) ? d : null,
                     _ => value,
                 };
+                if (column == "COL_MY_CNTY")
+                {
+                    // HRD saves My County as "NY,MONROE". The same county in either
+                    // form is left as HRD has it, a new one is written HRD's way.
+                    string state = profile.Fields.GetValueOrDefault("State", "");
+                    if (SameCounty(Text(now, column), value)) continue;
+                    typed = HrdCounty(state, value);
+                }
                 set(PrettyMyStation(column), column, typed, 1e-6);
             }
 
             if (HrdCountries.Dxcc(profile.Fields.GetValueOrDefault("Country", "")) is int dxcc)
                 set("My DXCC", "COL_MY_DXCC", dxcc.ToString(CultureInfo.InvariantCulture), 1e-6);
+        }
+
+        // A county as HRD's own save writes it: "NY,MONROE" (as given if it
+        // already has a state, or there's no state to add).
+        internal static string HrdCounty(string state, string county)
+        {
+            county = county.Trim();
+            if (county.Length == 0 || county.Contains(',') || state.Trim().Length == 0) return county.ToUpperInvariant();
+            return $"{state.Trim().ToUpperInvariant()},{county.ToUpperInvariant()}";
+        }
+
+        // "Monroe", "MONROE" and "NY,MONROE" are the same county.
+        internal static bool SameCounty(string a, string b)
+        {
+            static string Bare(string s) => (s.Contains(',') ? s[(s.IndexOf(',') + 1)..] : s).Trim();
+            return Bare(a).Length > 0 && string.Equals(Bare(a), Bare(b), StringComparison.OrdinalIgnoreCase);
         }
 
         private static string PrettyMyStation(string column) =>

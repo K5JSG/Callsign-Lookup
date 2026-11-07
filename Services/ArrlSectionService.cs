@@ -36,6 +36,21 @@ namespace CallsignLookup.Services
             return (table, index);
         });
 
+        // Every ARRL/RAC section abbreviation in the table, A to Z.
+        public static IReadOnlyList<string> AllSections()
+        {
+            var table = Data.Value.Table;
+            return table.States.Values
+                .Concat(table.SplitStates.Values.SelectMany(s => s.Keys))
+                .Concat(table.Canada.Values)
+                .Concat(table.Ontario.Values)
+                .Where(s => s.Trim().Length > 0)
+                .Select(s => s.Trim().ToUpperInvariant())
+                .Distinct()
+                .Order(StringComparer.Ordinal)
+                .ToList();
+        }
+
         // US station, from the county/state CountyLookupService found.
         public static ArrlSectionMatch? FromUsCounty(CountyMatch county)
         {

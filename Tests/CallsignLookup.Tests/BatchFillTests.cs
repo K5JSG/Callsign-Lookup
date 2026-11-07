@@ -292,5 +292,17 @@ namespace CallsignLookup.Tests
             Assert.Equal(HrdLogDatabase.BackupsToKeep, Directory.GetFiles(_folder, "* before Callsign Lookup batch fill.hrdsql").Length);
             Assert.True(File.Exists(other));
         }
+
+        [Fact]
+        public void Backup_ForASingleFill_IsNamedForIt_AndCountsWithTheBatchOnes()
+        {
+            string single = Db.Backup(HrdLogDatabase.FillQsoPurpose);
+            Assert.EndsWith(" before Callsign Lookup Fill HRD QSO.hrdsql", single);
+            for (int i = 0; i < 14; i++) Db.Backup();
+
+            int kept = Directory.GetFiles(_folder, "* before Callsign Lookup batch fill.hrdsql").Length +
+                       Directory.GetFiles(_folder, "* before Callsign Lookup Fill HRD QSO.hrdsql").Length;
+            Assert.Equal(HrdLogDatabase.BackupsToKeep, kept);
+        }
     }
 }

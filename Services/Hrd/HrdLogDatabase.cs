@@ -20,7 +20,9 @@ namespace CallsignLookup.Services.Hrd
     {
         public const string Table = "TABLE_HRD_CONTACTS_V07";
         public const int BackupsToKeep = 10;
-        private const string BackupSuffix = " before Callsign Lookup batch fill.hrdsql";
+        public const string BatchFillPurpose = "batch fill";
+        public const string FillQsoPurpose = "Fill HRD QSO";
+        private static string BackupSuffix(string purpose) => $" before Callsign Lookup {purpose}.hrdsql";
         private const int IpCliPort = 7826;
 
         private static readonly Regex ColumnName = new("^COL_[A-Z0-9_]+$", RegexOptions.Compiled);
@@ -122,6 +124,35 @@ namespace CallsignLookup.Services.Hrd
             return rows;
         }
 
+        // The keys of the QSOs with this callsign, on one of these dates
+        // ("yyyy-mm-dd"), at this time. HRD keeps the time as "hh:mm:ss" or
+        // "hh:mm:ss.000", so a time with seconds is matched to the second and
+        // one without to the minute.
+        public List<long> FindQsos(string call, IEnumerable<string> dates, string time)
+        {
+            var found = new List<long>();
+            string wanted = new(time.Where(char.IsAsciiDigit).ToArray());
+            if (call.Trim().Length == 0 || wanted.Length is not (4 or 6)) return found;
+
+            using var connection = Open(false);
+            foreach (string date in dates.Distinct())
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = $"select COL_PRIMARY_KEY, COL_TIME_ON from {Table} " +
+                                      "where upper(trim(COL_CALL)) = $call and substr(COL_QSO_DATE, 1, 10) = $date";
+                command.Parameters.AddWithValue("$call", call.Trim().ToUpperInvariant());
+                command.Parameters.AddWithValue("$date", date);
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    string stored = reader.IsDBNull(1) ? "" : new(reader.GetString(1).Split('.')[0].Where(char.IsAsciiDigit).ToArray());
+                    if (stored.Length >= wanted.Length && stored[..wanted.Length] == wanted)
+                        found.Add(reader.GetInt64(0));
+                }
+            }
+            return found;
+        }
+
         // The continent most QSOs with this DXCC entity have in the log -
         // HRD's own continent for the entity - or null if the log has none.
         public string? ContinentFor(int dxcc)
@@ -135,15 +166,17 @@ namespace CallsignLookup.Services.Hrd
         }
 
         // A copy of the log beside it, named "<log> backup <date time> before
-        // Callsign Lookup batch fill.hrdsql". Older such backups beyond the
-        // last BackupsToKeep are deleted - only ones with exactly that name.
-        public string Backup()
+        // Callsign Lookup batch fill.hrdsql" (or "... Fill HRD QSO.hrdsql" for a
+        // single fill). Older such backups beyond the last BackupsToKeep, of
+        // both kinds together, are deleted - only ones with exactly those names.
+        public string Backup(string purpose = BatchFillPurpose)
         {
             string folder = Path.GetDirectoryName(FilePath)!;
             string stem = Path.GetFileNameWithoutExtension(FilePath);
-            string destination = Path.Combine(folder, $"{stem} backup {DateTime.Now:yyyy-MM-dd HHmm}{BackupSuffix}");
+            string suffix = BackupSuffix(purpose);
+            string destination = Path.Combine(folder, $"{stem} backup {DateTime.Now:yyyy-MM-dd HHmm}{suffix}");
             for (int n = 2; File.Exists(destination); n++)
-                destination = Path.Combine(folder, $"{stem} backup {DateTime.Now:yyyy-MM-dd HHmm} ({n}){BackupSuffix}");
+                destination = Path.Combine(folder, $"{stem} backup {DateTime.Now:yyyy-MM-dd HHmm} ({n}){suffix}");
 
             using (var source = Open(false))
             using (var copy = new SqliteConnection(new SqliteConnectionStringBuilder
@@ -158,7 +191,9 @@ namespace CallsignLookup.Services.Hrd
 
         private static void PruneBackups(string folder)
         {
-            var old = new DirectoryInfo(folder).GetFiles("*" + BackupSuffix)
+            var dir = new DirectoryInfo(folder);
+            var old = new[] { BatchFillPurpose, FillQsoPurpose }
+                .SelectMany(p => dir.GetFiles("*" + BackupSuffix(p)))
                 .OrderByDescending(f => f.LastWriteTimeUtc)
                 .Skip(BackupsToKeep);
             foreach (var file in old)

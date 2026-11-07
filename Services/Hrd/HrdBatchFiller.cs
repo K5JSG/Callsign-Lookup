@@ -35,9 +35,9 @@ namespace CallsignLookup.Services.Hrd
         public bool HasLocationChoice => AlternativeChanges != null;
         public bool HasStationChoice => StationChanges != null;
 
-        // What would be written: the two choices (location, station) pick one of
-        // the four plans worked out in advance.
-        public HrdRowChanges? Active
+        // What the planner worked out: the two choices (location, station) pick
+        // one of the four plans worked out in advance.
+        public HrdRowChanges? Planned
         {
             get
             {
@@ -47,6 +47,72 @@ namespace CallsignLookup.Services.Hrd
                 if (address) return AlternativeChanges ?? Changes;
                 return Changes;
             }
+        }
+
+        // The QSO as the plan was made from it (every column). Null for one
+        // skipped before it was read.
+        public IReadOnlyDictionary<string, object?>? Row { get; init; }
+
+        // Values HRD's own Lookup wiped or changed that go back (POTA, IOTA,
+        // an SK note): these win over the plan.
+        public List<HrdColumnChange> Restores { get; } = [];
+
+        // What the user typed in the report (and what changed with it), by
+        // column: these win over everything. One set back to the log's value
+        // drops that column's change.
+        private readonly List<HrdColumnChange> _edits = [];
+        public IReadOnlyList<HrdColumnChange> Edits => _edits;
+
+        // Columns the user unticked: left as they are in the log.
+        public HashSet<string> Excluded { get; } = new(StringComparer.Ordinal);
+
+        public void SetEdit(string label, string column, object? value, double tolerance = 1e-6)
+        {
+            _edits.RemoveAll(e => e.Column == column);
+            _edits.Add(new HrdColumnChange(label, column, Row?.GetValueOrDefault(column), value) { Tolerance = tolerance });
+            Excluded.Remove(column);
+        }
+
+        public void ClearEdits()
+        {
+            _edits.Clear();
+            Excluded.Clear();
+        }
+
+        // Every change before the user's ticks: the plan, the restores over it,
+        // the edits over those. A change back to the log's own value is dropped.
+        public List<HrdColumnChange> Proposed()
+        {
+            var all = new List<HrdColumnChange>(Planned?.Changes ?? []);
+            foreach (var change in Restores.Concat(_edits))
+            {
+                int at = all.FindIndex(c => c.Column == change.Column);
+                if (at >= 0) all[at] = change with { Label = all[at].Label };
+                else all.Add(change);
+            }
+            return all.Where(c => !HrdRowMapper.SameValue(Row?.GetValueOrDefault(c.Column) ?? c.Old, c.New, c.Tolerance)).ToList();
+        }
+
+        // What would be written.
+        public HrdRowChanges? Active
+        {
+            get
+            {
+                var planned = Planned;
+                if (planned == null) return null;
+                if (Restores.Count == 0 && _edits.Count == 0 && Excluded.Count == 0) return planned;
+                var merged = new HrdRowChanges();
+                merged.Changes.AddRange(Proposed().Where(c => !Excluded.Contains(c.Column)));
+                merged.Warnings.AddRange(planned.Warnings);
+                return merged;
+            }
+        }
+
+        // A column's value as it would be written (the log's if unchanged).
+        public object? Current(string column)
+        {
+            var change = Active?.Changes.FirstOrDefault(c => c.Column == column);
+            return change != null ? change.New : Row?.GetValueOrDefault(column);
         }
 
         // Ticked in the preview to start with: it has changes and QRZ's record
@@ -181,7 +247,7 @@ namespace CallsignLookup.Services.Hrd
                 }
                 items.Add(new HrdBatchItem
                 {
-                    Pk = pk, Call = call, When = when, Changes = changes,
+                    Pk = pk, Call = call, When = when, Changes = changes, Row = row,
                     AlternativeChanges = alternative,
                     StationChanges = withStation,
                     StationAlternativeChanges = alternativeWithStation,
@@ -200,7 +266,7 @@ namespace CallsignLookup.Services.Hrd
         // it is now: if HRD (or anyone) changed it since the preview, it's not
         // written - the preview's "was" would be a lie. Everything else goes
         // in one transaction after a backup, then is read back.
-        public HrdBatchResult Apply(IReadOnlyList<HrdBatchItem> chosen)
+        public HrdBatchResult Apply(IReadOnlyList<HrdBatchItem> chosen, string purpose = HrdLogDatabase.BatchFillPurpose)
         {
             var result = new HrdBatchResult();
             var current = log.ReadRows(chosen.Select(c => c.Pk));
@@ -216,7 +282,7 @@ namespace CallsignLookup.Services.Hrd
             }
             if (toWrite.Count == 0) return result;
 
-            result.BackupPath = log.Backup();
+            result.BackupPath = log.Backup(purpose);
             log.Apply(toWrite.Select(i => new HrdRowUpdate(i.Pk, i.Active!.Columns)));
 
             var after = log.ReadRows(toWrite.Select(i => i.Pk));
@@ -235,7 +301,7 @@ namespace CallsignLookup.Services.Hrd
         // someone's changed them since and they're left). A backup first, as
         // for the batch itself. The result's Applied items are the reverse of
         // the batch's - "was" is what the batch wrote, "now" what's back.
-        public HrdBatchResult Undo(HrdBatchResult batch)
+        public HrdBatchResult Undo(HrdBatchResult batch, string purpose = HrdLogDatabase.BatchFillPurpose)
         {
             var result = new HrdBatchResult();
             var current = log.ReadRows(batch.Applied.Select(i => i.Pk));
@@ -251,7 +317,7 @@ namespace CallsignLookup.Services.Hrd
             }
             if (toRevert.Count == 0) return result;
 
-            result.BackupPath = log.Backup();
+            result.BackupPath = log.Backup(purpose);
             log.Apply(toRevert.Select(i => new HrdRowUpdate(i.Pk, i.Active!.Columns)));
 
             var after = log.ReadRows(toRevert.Select(i => i.Pk));
@@ -274,10 +340,10 @@ namespace CallsignLookup.Services.Hrd
         }
 
         // The result as text, to show and to copy.
-        public static string Summary(HrdBatchResult result, string logPath, bool undo = false)
+        public static string Summary(HrdBatchResult result, string logPath, bool undo = false, string title = "Batch fill")
         {
             var text = new StringBuilder();
-            text.AppendLine($"{(undo ? "Undo of batch fill" : "Batch fill")} - {DateTime.Now:yyyy-MM-dd HH:mm}");
+            text.AppendLine($"{(undo ? "Undo of " + title.ToLowerInvariant() : title)} - {DateTime.Now:yyyy-MM-dd HH:mm}");
             text.AppendLine($"Log: {logPath}");
             if (result.BackupPath.Length > 0) text.AppendLine($"Backup: {result.BackupPath}");
             text.AppendLine();

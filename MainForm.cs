@@ -441,106 +441,86 @@ namespace CallsignLookup
             }
         }
 
+        // Fill HRD QSO: HRD looks the open QSO up and saves it (its Lookup and
+        // Update buttons, pressed without taking the focus), then this app works
+        // out what to add on top from the saved row and shows it to correct and
+        // approve - the same report as Fill selected, for one QSO, with the
+        // LoTW and QRZ send. What HRD's Lookup wiped (POTA, IOTA, an SK note)
+        // goes back. HRD can't reopen the QSO afterwards: the user double-clicks it.
         private async void BtnFillHrd_Click(object? sender, EventArgs e)
         {
+            const string title = "Fill HRD QSO";
             if (_hrdWindow is not HrdEditWindow window || !window.IsOpen)
             {
                 UpdateStatus("No QSO is open in HRD Logbook - open it there first.");
                 return;
             }
-            string call = (await Task.Run(() => window.Read("edtCALL")) ?? "").ToUpperInvariant();
-            if (call.Length == 0)
+            var log = HrdLogDatabase.Find(out string error);
+            if (log == null)
             {
-                UpdateStatus("The QSO open in HRD has no callsign.");
+                MessageBox.Show(this, error, title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+            if (!_settings.HasQrzLogin && !PromptForQrzLogin()) return;
+            _qrz ??= new QrzService(_settings.QrzUsername, _settings.GetQrzPassword());
 
-            // Always a fresh lookup of the callsign that's open, in case it
-            // was changed in HRD since it was opened.
-            txtCallsign.Text = call;
-            if (!await LookupAsync(call) || _lastResult is not LookupResult lookup) return;
-
-            if (!HrdQsoFiller.SameStation(call, lookup.Qrz.Call) &&
-                MessageBox.Show(this,
-                    $"QRZ's page for {call} is the record for {lookup.Qrz.Call}.\n\n" +
-                    "That's normal for a portable or changed callsign, but it can also mean it's the wrong station. " +
-                    $"Fill in the QSO from {lookup.Qrz.Call}'s QRZ record anyway?",
-                    "QRZ record doesn't match", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
-                return;
-
-            var profile = cbxStationProfile.SelectedItem as HrdStationProfile;
-            bool clearQslVia = chkClearQslVia.Checked;
             _hrdFilling = true;
             SetBusy(true);
-            UpdateStatus($"Filling in {call} in HRD - leave HRD alone until it's done...");
             try
             {
-                var read = await Task.Run(async () =>
+                var top = await Task.Run(() => (
+                    Call: (window.ReadTopField("edtCALL") ?? "").ToUpperInvariant(),
+                    Date: window.ReadTopField("edtQSO_DATE") ?? "",
+                    Time: window.ReadTopField("edtTIME_ON") ?? ""));
+                if (top.Call.Length == 0)
                 {
-                    var qso = HrdQsoFiller.ReadQso(window);
-                    string address = qso.GetValueOrDefault("memoADDRESS", "");
-                    // A station QRZ has no location for: the address in HRD's Address
-                    // box (which the user can correct) locates it instead.
-                    // (Not for a portable call operating from another entity - ZF/KN2P:
-                    // the home location and address aren't where it is.)
-                    bool away = HrdQsoFiller.OperatingElsewhere(qso, lookup) != null;
-                    var located = away ? lookup : await AddressLocator.UseAddressAsync(lookup, address, _geocoder);
-                    // QRZ's location is in another state than its record: the address
-                    // gives the other choice.
-                    var other = away ? null : await AddressLocator.FindAlternativeAsync(located, address, _geocoder);
-                    return (qso, located, other);
+                    UpdateStatus("The QSO open in HRD has no callsign.");
+                    return;
+                }
+                txtCallsign.Text = top.Call;
+
+                // The QSO in the log. A new QSO (Add window) isn't there yet.
+                var pks = await Task.Run(() => log.FindQsos(top.Call, DateCandidates(top.Date), top.Time));
+                if (pks.Count != 1)
+                {
+                    UpdateStatus(pks.Count == 0
+                        ? $"{top.Call} {top.Date} {top.Time} isn't in HRD's log yet - save it in HRD first (nothing was changed)."
+                        : $"HRD's log has {pks.Count} QSOs with {top.Call} at {top.Date} {top.Time} - use Fill selected for it (nothing was changed).");
+                    return;
+                }
+                long pk = pks[0];
+
+                // Before HRD's Lookup: the log's row, with what the window shows over
+                // it (the user may have typed a park or a note before clicking Fill).
+                var snapshot = await Task.Run(() =>
+                {
+                    var row = log.ReadRows([pk]).GetValueOrDefault(pk) ?? [];
+                    foreach (var (id, column) in new[] { ("edtPOTA_REF", "COL_POTA_REF"), ("memCOMMENT", "COL_COMMENT"), ("edtQSL_VIA", "COL_QSL_VIA") })
+                        if (window.Read(id) is string shown) row[column] = shown;
+                    return row;
                 });
 
-                var chosen = read.located;
-                if (read.other != null)
+                UpdateStatus($"HRD is looking up {top.Call} and saving it...");
+                bool saved = await Task.Run(() =>
                 {
-                    bool? useAddress = ChooseLocation(call, read.located, read.other);
-                    if (useAddress == null)
-                    {
-                        UpdateStatus("Cancelled - nothing was changed in HRD.");
-                        return;
-                    }
-                    if (useAddress == true) chosen = read.other;
-                }
-
-                // The QSO's My Station is a different station than the one selected
-                // under Working from: keep HRD's or use the selected one?
-                bool useSelectedStation = false;
-                if (HrdQsoFiller.StationMismatch(read.qso, profile) is string stationHere)
-                {
-                    bool? useSelected = ChooseStation(call, stationHere, profile!);
-                    if (useSelected == null)
-                    {
-                        UpdateStatus("Cancelled - nothing was changed in HRD.");
-                        return;
-                    }
-                    useSelectedStation = useSelected == true;
-                }
-
-                var report = await Task.Run(() =>
-                {
-                    var plan = HrdQsoFiller.Plan(read.qso, chosen, HrdPotaParks.Find, profile, clearQslVia, useSelectedStation);
-                    return HrdQsoFiller.Apply(window, plan);
+                    window.Press("btnLookup");
+                    WaitForLookup(window);
+                    return window.PressUpdateAndWait();
                 });
-                int changed = report.Applied.Count(a => a.Took);
-                UpdateStatus($"{call}: {changed} field{(changed == 1 ? "" : "s")} filled in HRD" +
-                             (report.Problems.Count > 0 ? $", {report.Problems.Count} to do by hand" : "") +
-                             " - check it, then press Update in HRD.");
-                using var dialog = new HrdFillReportForm(report);
-                PlaceAbove(dialog);
-                switch (dialog.ShowDialog(this))
+                if (!saved)
                 {
-                    case DialogResult.Yes:
-                        UpdateStatus($"Saving {call} in HRD...");
-                        bool saved = await Task.Run(window.PressUpdateAndWait);
-                        UpdateStatus(saved
-                            ? $"{call} saved in HRD."
-                            : $"Pressed Update for {call}, but HRD's window is still open - check HRD.");
-                        break;
+                    UpdateStatus($"HRD's window for {top.Call} is still open after Update (it may be asking something) - check HRD. Nothing else was done.");
+                    return;
                 }
+
+                UpdateStatus($"{top.Call} looked up and saved by HRD - working out what to add...");
+                using var form = new BatchFillForm(log, new CallsignLookupService(_qrz, _geocoder), _geocoder, [pk],
+                    cbxStationProfile.SelectedItem as HrdStationProfile, chkClearQslVia.Checked, snapshot) { TopMost = TopMost };
+                form.ShowDialog(this);
+                UpdateStatus($"{top.Call}: done - double-click the QSO in HRD to check it.");
             }
             catch (Exception ex) when (ex is HrdException or System.Windows.Automation.ElementNotAvailableException
-                                           or InvalidOperationException)
+                                           or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException or IOException)
             {
                 UpdateStatus($"Couldn't finish filling in HRD: {ex.Message}");
             }
@@ -551,65 +531,42 @@ namespace CallsignLookup
             }
         }
 
+        // HRD's Lookup fills the window over a second or two: wait until the
+        // fields it fills stop changing (at most about 10 seconds).
+        private static void WaitForLookup(HrdEditWindow window)
+        {
+            string Read() => string.Join("|", new[] { "edtNAME", "edtQTH", "edtGRIDSQUARE", "cbxCOUNTRY" }.Select(id => window.Read(id) ?? ""));
+            string last = Read();
+            int steady = 0;
+            for (int i = 0; i < 30 && steady < 3; i++)
+            {
+                Thread.Sleep(300);
+                string now = Read();
+                steady = now == last ? steady + 1 : 0;
+                last = now;
+            }
+        }
+
+        // The date HRD's window shows, as the log keeps it (yyyy-mm-dd). The
+        // window's format follows Windows' settings, so every reading of it is
+        // tried. The time then has to match too.
+        internal static List<string> DateCandidates(string shown)
+        {
+            var dates = new List<string>();
+            string[] formats =
+            [
+                "yyyy-MM-dd", "yyyy/MM/dd", "yyyyMMdd", "yyyy.MM.dd", "MM/dd/yyyy", "M/d/yyyy", "dd/MM/yyyy", "d/M/yyyy",
+                "dd.MM.yyyy", "dd-MM-yyyy", "dd-MMM-yyyy", "d MMM yyyy", "dd MMM yyyy", "MMM d, yyyy",
+            ];
+            foreach (var culture in new[] { System.Globalization.CultureInfo.InvariantCulture, System.Globalization.CultureInfo.CurrentCulture })
+            {
+                foreach (string format in formats.Append(culture.DateTimeFormat.ShortDatePattern))
+                    if (DateTime.TryParseExact(shown.Trim(), format, culture, System.Globalization.DateTimeStyles.None, out var d))
+                        dates.Add(d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+            }
+            return dates.Distinct().ToList();
+        }
+
         private void UpdateStatus(string text) => lblStatus.Text = text;
-
-        // The QSO's My Station isn't the station selected under Working from (an old
-        // Penfield QSO opened while working from Home): asks which to keep. True for
-        // the selected station, false to keep what's in HRD, null to cancel.
-        private bool? ChooseStation(string call, string stationHere, HrdStationProfile selected)
-        {
-            var keep = new TaskDialogCommandLinkButton("Keep what's in HRD", $"{stationHere} - My Station is left as it is");
-            var use = new TaskDialogCommandLinkButton("Use the selected station",
-                $"{selected.DisplayName} - replaces this QSO's My Station");
-            var page = new TaskDialogPage
-            {
-                Caption = "Which station?",
-                Heading = $"{call}: its My Station isn't the one selected",
-                Text = $"This QSO's My Station is {stationHere}, but \"Working from\" is {selected.DisplayName}. " +
-                       "Which should it have?",
-                Icon = TaskDialogIcon.Warning,
-                AllowCancel = true,
-                Buttons = { keep, use, TaskDialogButton.Cancel },
-            };
-            var result = TaskDialog.ShowDialog(this, page);
-            return result == use ? true : result == keep ? false : null;
-        }
-
-        // QRZ's location is in another state than its record says (W7F: Maricopa
-        // County, AZ, for a Tacoma, WA station): asks which to use. True for the
-        // address's, false for QRZ's, null to cancel.
-        private bool? ChooseLocation(string call, LookupResult qrz, LookupResult address)
-        {
-            var useQrz = new TaskDialogCommandLinkButton("Use QRZ's location", AddressLocator.Describe(qrz));
-            var useAddress = new TaskDialogCommandLinkButton("Use the address's location",
-                $"{AddressLocator.Describe(address)}{Environment.NewLine}{address.LocationSource}");
-            var page = new TaskDialogPage
-            {
-                Caption = "Which location?",
-                Heading = $"{call}: QRZ's location and its address disagree",
-                Text = $"QRZ puts {call} in {qrz.County?.StateAbbrev}, but its record lists {qrz.Qrz.State}. " +
-                       "Special-event stations often have a club address that isn't where they operate. Which should be filled in?",
-                Icon = TaskDialogIcon.Warning,
-                AllowCancel = true,
-                Buttons = { useQrz, useAddress, TaskDialogButton.Cancel },
-            };
-            var result = TaskDialog.ShowDialog(this, page);
-            return result == useQrz ? false : result == useAddress ? true : null;
-        }
-
-        // The report goes in front of this window, even with "Stay on top"
-        // on, and half an inch higher than it, so its title bar is clear
-        // of this one and easy to grab.
-        private void PlaceAbove(Form dialog)
-        {
-            dialog.TopMost = TopMost;
-            dialog.StartPosition = FormStartPosition.Manual;
-            var area = Screen.FromControl(this).WorkingArea;
-            int x = Left + (Width - dialog.Width) / 2;
-            int y = Top - DeviceDpi / 2;
-            dialog.Location = new Point(
-                Math.Max(area.Left, Math.Min(x, area.Right - dialog.Width)),
-                Math.Max(area.Top, Math.Min(y, area.Bottom - dialog.Height)));
-        }
     }
 }

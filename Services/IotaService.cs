@@ -95,6 +95,7 @@ namespace CallsignLookup.Services
         {
             _groups = null;
             _islandIds = null;
+            _islandsByGroup = null;
         }
 
         // Islands in the downloaded IOTA list that weren't in the one shipped
@@ -275,18 +276,49 @@ namespace CallsignLookup.Services
         private static string IslandKey(string refNo, string island) =>
             $"{refNo.Trim()}|{island.Trim()}".ToUpperInvariant();
 
-        private static Dictionary<string, string> LoadIslandIds()
+        private static Dictionary<string, string> LoadIslandIds() => LoadFromList(ParseIslandIds);
+
+        // A group's islands on IOTA's list, as HRD shows them: id and name
+        // ("4766", "Key West"), by name. Empty for a reference not on the list.
+        public static IReadOnlyList<(string Id, string Name)> IslandsOf(string refNo)
+        {
+            _islandsByGroup ??= LoadFromList(ParseIslandsByGroup);
+            return _islandsByGroup.TryGetValue(refNo.Trim().ToUpperInvariant(), out var islands) ? islands : [];
+        }
+
+        private static Dictionary<string, List<(string Id, string Name)>>? _islandsByGroup;
+
+        internal static Dictionary<string, List<(string Id, string Name)>> ParseIslandsByGroup(string json)
+        {
+            using var doc = JsonDocument.Parse(json);
+            var groups = new Dictionary<string, List<(string Id, string Name)>>();
+            foreach (var g in doc.RootElement.EnumerateArray())
+            {
+                string refNo = (g.GetProperty("refno").GetString() ?? "").Trim().ToUpperInvariant();
+                var list = new List<(string Id, string Name)>();
+                foreach (var sub in g.GetProperty("sub_groups").EnumerateArray())
+                    foreach (var island in sub.GetProperty("islands").EnumerateArray())
+                        list.Add(((island.GetProperty("id").GetString() ?? "").Trim(),
+                                  (island.GetProperty("island_name").GetString() ?? "").Trim()));
+                groups[refNo] = list.Where(i => i.Id.Length > 0).DistinctBy(i => i.Id)
+                    .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
+            }
+            return groups;
+        }
+
+        // The downloaded list if it's readable, otherwise the shipped copy.
+        private static T LoadFromList<T>(Func<string, T> parse)
         {
             try
             {
                 if (File.Exists(DownloadedListPath))
-                    return ParseIslandIds(File.ReadAllText(DownloadedListPath));
+                    return parse(File.ReadAllText(DownloadedListPath));
             }
             catch (Exception ex) when (IsBadList(ex) || ex is IOException or UnauthorizedAccessException)
             {
                 // Damaged download - the shipped copy will do.
             }
-            return ParseIslandIds(File.ReadAllText(DataFiles.PathFor(ListFileName)));
+            return parse(File.ReadAllText(DataFiles.PathFor(ListFileName)));
         }
 
         internal static Dictionary<string, string> ParseIslandIds(string json)
