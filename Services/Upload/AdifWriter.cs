@@ -30,7 +30,7 @@ namespace CallsignLookup.Services.Upload
             "SIG_INFO", "ARRL_SECT", "QSL_VIA", "COMMENT", "EMAIL", "CONTEST_ID", "SRX", "STX", "SRX_STRING", "STX_STRING",
             "OPERATOR", "STATION_CALLSIGN", "MY_GRIDSQUARE", "MY_LAT", "MY_LON", "MY_STATE", "MY_CNTY", "MY_COUNTRY", "MY_DXCC",
             "MY_CQ_ZONE", "MY_ITU_ZONE", "MY_ARRL_SECT", "MY_CITY", "MY_NAME", "MY_RIG", "MY_ANTENNA", "MY_IOTA",
-            "MY_POTA_REF", "MY_SOTA_REF", "MY_WWFF_REF", "MY_SIG", "MY_SIG_INFO",
+            "MY_POTA_REF", "MY_SOTA_REF", "MY_WWFF_REF", "MY_SIG", "MY_SIG_INFO", "LOTW_QSL_SENT", "LOTW_QSLSDATE",
         ];
 
         // A file of these QSOs for TQSL.
@@ -63,7 +63,7 @@ namespace CallsignLookup.Services.Upload
             string text = Text(raw);
             switch (field)
             {
-                case "QSO_DATE":
+                case "QSO_DATE" or "LOTW_QSLSDATE":
                 {
                     string digits = Digits(text.Length >= 10 ? text[..10] : text);
                     return digits.Length == 8 ? digits : "";

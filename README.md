@@ -98,6 +98,8 @@ Both fills can send the QSOs they write, in the background, with no TQSL or brow
 | Ticked to start with | Only if a QSO isn't marked as sent to LoTW yet | Always, when HRD has a key |
 | After it's sent | HRD's LoTW sent flag, date and "Upload OK." status | HRD's QRZ sent flag, date and QRZ's reply |
 
+LoTW is sent first. A QSO that has gone to LoTW (in this send or before) goes to QRZ already marked as sent to LoTW, with the date, so QRZ's logbook shows it too.
+
 The TQSL location is picked for you when it's clear: the location HRD last used for that callsign, if its callsign and grid fit the QSO's My Station, or else the one location whose callsign and grid fit (a park reference in a location's name settles a tie). If none fits, nothing is picked and Approve stays off until you choose one, so a QSO is never signed with the wrong location.
 
 If your certificate has a password, Callsign Lookup asks for it in its own box when TQSL needs it. It's used for that send only and never saved. **Skip LoTW** leaves those QSOs unsent, and HRD's own upload can send them later. TQSL's "already on LoTW" answer counts as sent. A send that fails leaves HRD's flags alone and the summary says why. The API key and password are never shown, logged or saved by Callsign Lookup.

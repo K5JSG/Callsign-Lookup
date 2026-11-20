@@ -65,13 +65,16 @@ namespace CallsignLookup.Services.Upload
             var flags = new Dictionary<long, Dictionary<string, object?>>();
             DateTime today = DateTime.UtcNow.Date;
 
+            // The row is updated too, so a QSO sent to LoTW goes to QRZ with
+            // LoTW marked as sent.
             void Flag(long pk, Dictionary<string, object?> columns)
             {
                 if (!flags.TryGetValue(pk, out var all)) flags[pk] = all = [];
-                foreach (var (column, value) in columns) all[column] = value;
+                foreach (var (column, value) in columns) all[column] = rows[pk][column] = value;
             }
 
-            // LoTW: one TQSL run per location.
+            // LoTW first, so QRZ gets the QSO already marked as sent to LoTW.
+            // One TQSL run per location.
             if (request.LotwLocations.Count > 0)
             {
                 string? tqsl = _tqslPath();

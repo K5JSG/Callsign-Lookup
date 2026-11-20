@@ -213,21 +213,30 @@ namespace CallsignLookup.Tests
         {
             var home = new TqslLocation("Home", "K5JSG", "FN13AH");
             var sentRows = new List<string>();
+            var qrzRecords = new Dictionary<string, string>();
             var uploader = new QsoUploader(_log,
                 (tqsl, location, rows, password, token) =>
                 {
                     sentRows.AddRange(rows.Select(r => (string)r["COL_CALL"]!));
                     return Task.FromResult(new LotwResult(true, false, 0, "Sent to LoTW."));
                 },
-                (key, row, token) => Task.FromResult((string)row["COL_CALL"]! == "W5ERX"
-                    ? new QrzResult(true, "Sent to QRZ.", "77", "RESULT=OK&LOGID=77&COUNT=1")
-                    : new QrzResult(false, "QRZ didn't take it.", "", "RESULT=FAIL")),
+                (key, row, token) =>
+                {
+                    qrzRecords[(string)row["COL_CALL"]!] = AdifWriter.FullRecord(row);
+                    return Task.FromResult((string)row["COL_CALL"]! == "W5ERX"
+                        ? new QrzResult(true, "Sent to QRZ.", "77", "RESULT=OK&LOGID=77&COUNT=1")
+                        : new QrzResult(false, "QRZ didn't take it.", "", "RESULT=FAIL"));
+                },
                 station => "KEY",
                 () => "tqsl.exe");
 
             var report = await uploader.SendAsync(new UploadRequest(new Dictionary<long, TqslLocation> { [1] = home }, [1, 2]));
 
             Assert.Equal(["W5ERX"], sentRows);
+            // QRZ got the LoTW-sent QSO already marked as sent to LoTW.
+            string today = DateTime.UtcNow.ToString("yyyyMMdd");
+            Assert.Contains($"<LOTW_QSL_SENT:1>Y <LOTW_QSLSDATE:8>{today} ", qrzRecords["W5ERX"]);
+            Assert.DoesNotContain("LOTW_QSL_SENT", qrzRecords["K1ABC"]);
             Assert.Equal(1, report.LotwSent);
             Assert.Equal(1, report.QrzSent);
             Assert.Equal("", report.FlagError);
