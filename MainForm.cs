@@ -40,6 +40,7 @@ namespace CallsignLookup
             chkStayOnTop.Checked = TopMost = _settings.StayOnTop;
             chkClearQslVia.Checked = _settings.ClearQslVia;
             LoadStationProfiles();
+            LoadHrdLogs();
             _hrdTimer.Tick += HrdTimer_Tick;
             _hrdTimer.Start();
         }
@@ -296,7 +297,7 @@ namespace CallsignLookup
                 return;
             }
 
-            var log = HrdLogDatabase.Find(out string error);
+            var log = HrdLogDatabase.Find(_settings.HrdLog, out string error);
             if (log == null)
             {
                 MessageBox.Show(this, error, title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -365,6 +366,30 @@ namespace CallsignLookup
             cbxStationProfile.SelectedItem = profiles.FirstOrDefault(p => p.DisplayName == _settings.HrdStationProfile)
                                              ?? profiles.FirstOrDefault();
             cbxStationProfile.Enabled = profiles.Count > 0;
+        }
+
+        // The "HRD log" row only shows when HRD has more than one local log
+        // (the laptop's K5JSG and K5JSG/P Portable). The window grows by the
+        // row so the results keep their room. Nothing is picked until the user
+        // picks one: the fills never guess which log to change.
+        private void LoadHrdLogs()
+        {
+            var logs = HrdLogDatabase.ListLogs(out _);
+            cbxHrdLog.Items.Clear();
+            foreach (var log in logs) cbxHrdLog.Items.Add(log.Title);
+            cbxHrdLog.SelectedItem = logs.Any(l => l.Title == _settings.HrdLog) ? _settings.HrdLog : null;
+            if (logs.Count <= 1) return;
+
+            hrdLogPanel.Visible = true;
+            MinimumSize = new Size(MinimumSize.Width, MinimumSize.Height + hrdLogPanel.Height);
+            Height += hrdLogPanel.Height;
+        }
+
+        private void CbxHrdLog_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (cbxHrdLog.SelectedItem is not string title || title == _settings.HrdLog) return;
+            _settings.HrdLog = title;
+            _settings.Save();
         }
 
         private void CbxStationProfile_SelectedIndexChanged(object? sender, EventArgs e)
@@ -455,7 +480,7 @@ namespace CallsignLookup
                 UpdateStatus("No QSO is open in HRD Logbook - open it there first.");
                 return;
             }
-            var log = HrdLogDatabase.Find(out string error);
+            var log = HrdLogDatabase.Find(_settings.HrdLog, out string error);
             if (log == null)
             {
                 MessageBox.Show(this, error, title, MessageBoxButtons.OK, MessageBoxIcon.Warning);

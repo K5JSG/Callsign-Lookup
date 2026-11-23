@@ -58,6 +58,9 @@ namespace CallsignLookup
             lblWorkingFrom = new Label();
             cbxStationProfile = new ComboBox();
             btnFillHrd = new Button();
+            hrdLogPanel = new FlowLayoutPanel();
+            lblHrdLog = new Label();
+            cbxHrdLog = new ComboBox();
             bottomPanel = new FlowLayoutPanel();
             btnCopy = new Button();
             btnClear = new Button();
@@ -70,6 +73,7 @@ namespace CallsignLookup
             resultsPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBoxLogo).BeginInit();
             hrdPanel.SuspendLayout();
+            hrdLogPanel.SuspendLayout();
             bottomPanel.SuspendLayout();
             statusStrip.SuspendLayout();
             SuspendLayout();
@@ -410,6 +414,38 @@ namespace CallsignLookup
             btnFillHrd.UseVisualStyleBackColor = true;
             btnFillHrd.Click += BtnFillHrd_Click;
             //
+            // hrdLogPanel
+            //
+            // Shown only when HRD has more than one local log (see LoadHrdLogs).
+            hrdLogPanel.AutoSize = true;
+            hrdLogPanel.Controls.Add(lblHrdLog);
+            hrdLogPanel.Controls.Add(cbxHrdLog);
+            hrdLogPanel.Dock = DockStyle.Bottom;
+            hrdLogPanel.Name = "hrdLogPanel";
+            hrdLogPanel.Padding = new Padding(8, 4, 8, 0);
+            hrdLogPanel.Size = new Size(740, 33);
+            hrdLogPanel.TabIndex = 6;
+            hrdLogPanel.Visible = false;
+            hrdLogPanel.WrapContents = false;
+            //
+            // lblHrdLog
+            //
+            lblHrdLog.Anchor = AnchorStyles.Left;
+            lblHrdLog.AutoSize = true;
+            lblHrdLog.Font = new Font(Font, FontStyle.Bold);
+            lblHrdLog.Name = "lblHrdLog";
+            lblHrdLog.TabIndex = 0;
+            lblHrdLog.Text = "HRD log:";
+            //
+            // cbxHrdLog
+            //
+            cbxHrdLog.Anchor = AnchorStyles.Left;
+            cbxHrdLog.DropDownStyle = ComboBoxStyle.DropDownList;
+            cbxHrdLog.Name = "cbxHrdLog";
+            cbxHrdLog.Size = new Size(200, 23);
+            cbxHrdLog.TabIndex = 1;
+            cbxHrdLog.SelectedIndexChanged += CbxHrdLog_SelectedIndexChanged;
+            //
             // bottomPanel
             //
             bottomPanel.AutoSize = true;
@@ -502,6 +538,7 @@ namespace CallsignLookup
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(740, 429);
             Controls.Add(resultsPanel);
+            Controls.Add(hrdLogPanel);
             Controls.Add(hrdPanel);
             Controls.Add(bottomPanel);
             Controls.Add(topPanel);
@@ -518,6 +555,8 @@ namespace CallsignLookup
             resultsPanel.PerformLayout();
             hrdPanel.ResumeLayout(false);
             hrdPanel.PerformLayout();
+            hrdLogPanel.ResumeLayout(false);
+            hrdLogPanel.PerformLayout();
             bottomPanel.ResumeLayout(false);
             bottomPanel.PerformLayout();
             statusStrip.ResumeLayout(false);
@@ -558,6 +597,9 @@ namespace CallsignLookup
         private Label lblWorkingFrom;
         private ComboBox cbxStationProfile;
         private Button btnFillHrd;
+        private FlowLayoutPanel hrdLogPanel;
+        private Label lblHrdLog;
+        private ComboBox cbxHrdLog;
         private FlowLayoutPanel bottomPanel;
         private Button btnCopy;
         private Button btnClear;

@@ -14,6 +14,10 @@ namespace CallsignLookup.Services
         // HRD lists it ("Home - K5JSG").
         public string HrdStationProfile { get; set; } = "";
 
+        // The HRD log picked in the "HRD log" drop-down, by HRD's title
+        // ("K5JSG/P Portable"). Only used when HRD has more than one local log.
+        public string HrdLog { get; set; } = "";
+
         // "Stay on top": the main window stays above other windows (HRD).
         public bool StayOnTop { get; set; }
 

@@ -42,47 +42,56 @@ namespace CallsignLookup.Services.Hrd
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "HRDLLC", "HRD Logbook", "LogbookDatabases8.xml");
 
-        // The log from HRD's list of logbooks. Null, with the reason, when
-        // there isn't exactly one local SQLite log - this never guesses which.
-        public static HrdLogDatabase? Find(out string error)
+        // HRD's local SQLite logs (title and file), in HRD's order. Empty, with
+        // the reason, when the list can't be read.
+        public static List<(string Title, string Path)> ListLogs(out string error, string? databasesFile = null)
         {
             error = "";
+            databasesFile ??= DatabasesFile;
             try
             {
-                if (!File.Exists(DatabasesFile))
+                if (!File.Exists(databasesFile))
                 {
                     error = "Couldn't find HRD Logbook's list of logbooks - is HRD Logbook installed?";
-                    return null;
+                    return new();
                 }
 
-                var logs = XDocument.Load(DatabasesFile).Descendants("Database")
+                var logs = XDocument.Load(databasesFile).Descendants("Database")
                     .Where(d => (string?)d.Attribute("DatabaseType") == "Local/SQLite")
                     .Select(d => (Title: (string?)d.Attribute("Title") ?? "", Path: (string?)d.Attribute("Database") ?? ""))
                     .Where(d => d.Path.Length > 0)
                     .ToList();
-                if (logs.Count == 0)
-                {
-                    error = "HRD Logbook has no local SQLite log.";
-                    return null;
-                }
-                if (logs.Count > 1)
-                {
-                    error = $"HRD Logbook has {logs.Count} local logs ({string.Join(", ", logs.Select(l => l.Title))}) - " +
-                            "the batch fill won't guess which one.";
-                    return null;
-                }
-                if (!File.Exists(logs[0].Path))
-                {
-                    error = $"HRD's log file isn't there: {logs[0].Path}";
-                    return null;
-                }
-                return new HrdLogDatabase(logs[0].Path, logs[0].Title);
+                if (logs.Count == 0) error = "HRD Logbook has no local SQLite log.";
+                return logs;
             }
             catch (Exception ex) when (ex is IOException or System.Xml.XmlException or UnauthorizedAccessException)
             {
                 error = $"Couldn't read HRD's list of logbooks: {ex.Message}";
+                return new();
+            }
+        }
+
+        // The log to fill: the only local log, or with several, the one picked
+        // in the "HRD log" drop-down (by title). Null, with the reason, when
+        // there are several and none is picked - this never guesses which.
+        public static HrdLogDatabase? Find(string? chosenTitle, out string error, string? databasesFile = null)
+        {
+            var logs = ListLogs(out error, databasesFile);
+            if (logs.Count == 0) return null;
+
+            var log = logs.Count == 1 ? logs[0] : logs.FirstOrDefault(l => l.Title == chosenTitle);
+            if (log.Path == null)
+            {
+                error = $"HRD Logbook has {logs.Count} local logs ({string.Join(", ", logs.Select(l => l.Title))}). " +
+                        "Pick the one to fill in the \"HRD log\" drop-down.";
                 return null;
             }
+            if (!File.Exists(log.Path))
+            {
+                error = $"HRD's log file isn't there: {log.Path}";
+                return null;
+            }
+            return new HrdLogDatabase(log.Path, log.Title);
         }
 
         private SqliteConnection Open(bool writable)
