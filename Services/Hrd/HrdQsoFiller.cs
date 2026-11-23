@@ -119,9 +119,10 @@ namespace CallsignLookup.Services.Hrd
                 plan.Changes.Add(new HrdFieldChange(label, tab, readId, writeId, how, old, newValue, typed));
             }
 
-            // 1. Contact details, against QRZ. A name that matches with or
-            // without the nickname is fine.
-            if (record.FullName.Length > 0 && !SameText(Get("edtNAME"), record.FullName))
+            // 1. Contact details, against QRZ. The name must be exactly as QRZ
+            // has it, nickname included (Michael D "Mike" Hooks), so every QSO
+            // with the same station reads the same.
+            if (record.FullName.Length > 0 && !SameText(Get("edtNAME"), record.NameWithNickname))
                 Change("Name", "", "edtNAME", "edtNAME", HrdSetBy.Text, record.NameWithNickname);
             if (record.City.Length > 0)
                 Change("QTH", "", "edtQTH", "edtQTH", HrdSetBy.Text, record.City);

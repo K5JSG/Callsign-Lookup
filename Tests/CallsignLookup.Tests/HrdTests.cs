@@ -704,6 +704,23 @@ namespace CallsignLookup.Tests
 
             qso["edtNAME"] = "Bill Hamalainen";
             Assert.Equal("WILLIAM \"Bill\" HAMALAINEN", Changes(Plan(qso, record))["Name"]);
+
+            // The name without QRZ's nickname gets the nickname added.
+            qso["edtNAME"] = "William Hamalainen";
+            Assert.Equal("WILLIAM \"Bill\" HAMALAINEN", Changes(Plan(qso, record))["Name"]);
+        }
+
+        [Fact]
+        public void Name_WithoutANicknameOnQrz_IsLeftAlone()
+        {
+            var qso = W5erxQso();
+            qso["edtNAME"] = "William Hamalainen";
+            var record = new QrzCallsignRecord
+            {
+                Call = "W5ERX", FirstName = "WILLIAM", LastName = "HAMALAINEN",
+                City = "Kyle", State = "TX", County = "Hays", Dxcc = 291, Latitude = 30.021276, Longitude = -97.880774,
+            };
+            Assert.False(Changes(Plan(qso, record)).ContainsKey("Name"));
         }
 
         [Fact]
